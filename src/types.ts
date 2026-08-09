@@ -19,6 +19,9 @@ export interface StoredImage {
   caption: string
   order: number
   createdAt: number
+  /** Last time this image's metadata changed — used by cloud sync (optional
+   * for records created before sync existed; treat missing as createdAt). */
+  updatedAt?: number
 }
 
 export interface JournalEntry {

@@ -4,6 +4,8 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../lib/db'
 import { formatDate, formatMoney, parsePnl, todayISO } from '../lib/format'
 import type { JournalEntry } from '../types'
+import SyncBar from './SyncBar'
+import { isSupabaseConfigured } from '../lib/supabase'
 
 function ResultBadge({ result }: { result: JournalEntry['result'] }) {
   if (result === 'Win')
@@ -53,6 +55,8 @@ export default function DateList() {
           Pick a date to review or log your day.
         </p>
       </header>
+
+      <SyncBar />
 
       {/* Open / create a day */}
       <div className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
@@ -137,7 +141,9 @@ export default function DateList() {
       )}
 
       <footer className="mt-10 text-center text-xs text-slate-600">
-        Data is stored locally in this browser (IndexedDB).
+        {isSupabaseConfigured
+          ? 'Stored on this device (IndexedDB) and synced to the cloud when signed in.'
+          : 'Data is stored locally in this browser (IndexedDB).'}
       </footer>
     </div>
   )
