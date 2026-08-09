@@ -1,0 +1,1 @@
+{"root":["./src/main.tsx","./src/types.ts","./src/vite-env.d.ts","./src/components/checklist.tsx","./src/components/datelist.tsx","./src/components/dayview.tsx","./src/components/imagegallery.tsx","./src/components/lightbox.tsx","./src/lib/checklist.ts","./src/lib/db.ts","./src/lib/format.ts"],"errors":true,"version":"5.9.3"}
