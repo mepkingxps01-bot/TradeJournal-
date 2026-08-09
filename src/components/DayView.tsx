@@ -127,8 +127,23 @@ export default function DayView() {
         </div>
       </Section>
 
-      {/* 2. Entry */}
-      <Section title="2 · Entry" subtitle="Entry chart + confirmation checklist">
+      {/* 2. Plan for today */}
+      <Section
+        title="2 · Plan for Today"
+        subtitle="Your game plan — charts + written plan"
+      >
+        <ImageGallery date={date} section="plan" label="plan charts" />
+        <textarea
+          value={entry.plan}
+          onChange={(e) => patch({ plan: e.target.value })}
+          placeholder="Write your plan for today — scenarios, levels, what you'll do if…"
+          rows={4}
+          className={`mt-4 ${inputCls}`}
+        />
+      </Section>
+
+      {/* 3. Entry */}
+      <Section title="3 · Entry" subtitle="Entry chart + confirmation checklist">
         <ImageGallery date={date} section="entry" label="entry charts" />
         <div className="mt-4">
           <Checklist
@@ -141,9 +156,9 @@ export default function DayView() {
         </div>
       </Section>
 
-      {/* 3. Intratrade management */}
+      {/* 4. Intratrade management */}
       <Section
-        title="3 · Intratrade Management"
+        title="4 · Intratrade Management"
         subtitle="e.g. pyramid entries, trailing stop-loss"
       >
         <ImageGallery date={date} section="management" label="management screenshots" />
@@ -156,8 +171,8 @@ export default function DayView() {
         />
       </Section>
 
-      {/* 4. Result */}
-      <Section title="4 · Result">
+      {/* 5. Result */}
+      <Section title="5 · Result">
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex gap-2">
             {(['Win', 'Loss'] as TradeResult[]).map((r) => {
@@ -194,8 +209,8 @@ export default function DayView() {
         </div>
       </Section>
 
-      {/* 5. Additional note */}
-      <Section title="5 · Additional Note" subtitle="A reminder to your future self">
+      {/* 6. Additional note */}
+      <Section title="6 · Additional Note" subtitle="A reminder to your future self">
         <textarea
           value={entry.note}
           onChange={(e) => patch({ note: e.target.value })}

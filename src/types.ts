@@ -9,7 +9,7 @@ export type TradeResult = 'Win' | 'Loss'
 /** Checklist state: 'yes' = green check, 'no' = red X, null = not answered. */
 export type Check = 'yes' | 'no' | null
 
-export type ImageSection = 'htf' | 'entry' | 'management'
+export type ImageSection = 'htf' | 'plan' | 'entry' | 'management'
 
 export interface StoredImage {
   id: string
@@ -30,7 +30,10 @@ export interface JournalEntry {
   marketPhase: MarketPhase | ''
   target: string
 
-  // 2. Entry checklist (keyed by CHECKLIST_ITEMS[].key)
+  // 2. Plan for today (manual typing)
+  plan: string
+
+  // 3. Entry checklist (keyed by CHECKLIST_ITEMS[].key)
   checklist: Record<string, Check>
   pdArraysNote: string
   expectedRR: string
@@ -56,6 +59,7 @@ export function emptyEntry(date: string): JournalEntry {
     bias: '',
     marketPhase: '',
     target: '',
+    plan: '',
     checklist: {},
     pdArraysNote: '',
     expectedRR: '',
