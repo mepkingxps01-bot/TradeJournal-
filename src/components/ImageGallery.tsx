@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, addImages, deleteImage } from '../lib/db'
+import { db, addImages, deleteImage, updateImageCaption } from '../lib/db'
 import type { ImageSection, StoredImage } from '../types'
 import Lightbox from './Lightbox'
 
@@ -8,6 +8,8 @@ interface Props {
   date: string
   section: ImageSection
   label?: string
+  /** When true, show an editable note textbox under each image. */
+  perImageNote?: boolean
 }
 
 /** Manages an object URL for a blob, revoking it when the blob changes/unmounts. */
@@ -23,10 +25,12 @@ function useObjectUrl(blob: Blob): string {
 
 function LargeImage({
   image,
+  perImageNote,
   onOpen,
   onDelete,
 }: {
   image: StoredImage
+  perImageNote?: boolean
   onOpen: () => void
   onDelete: () => void
 }) {
@@ -38,7 +42,7 @@ function LargeImage({
           src={url}
           alt={image.caption || 'chart'}
           onClick={onOpen}
-          className="block max-h-[80vh] w-full cursor-zoom-in object-contain"
+          className="block max-h-[85vh] w-full cursor-zoom-in object-contain"
         />
       )}
       <button
@@ -48,16 +52,26 @@ function LargeImage({
       >
         ✕
       </button>
-      {image.caption && (
-        <figcaption className="border-t border-slate-800 px-3 py-1.5 text-xs text-slate-300">
-          {image.caption}
-        </figcaption>
+      {perImageNote ? (
+        <textarea
+          defaultValue={image.caption}
+          onBlur={(e) => updateImageCaption(image.id, e.target.value)}
+          placeholder="Note for this chart…"
+          rows={2}
+          className="block w-full resize-y border-t border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 outline-none focus:bg-slate-900"
+        />
+      ) : (
+        image.caption && (
+          <figcaption className="border-t border-slate-800 px-3 py-1.5 text-xs text-slate-300">
+            {image.caption}
+          </figcaption>
+        )
       )}
     </figure>
   )
 }
 
-export default function ImageGallery({ date, section, label }: Props) {
+export default function ImageGallery({ date, section, label, perImageNote }: Props) {
   const images =
     useLiveQuery(
       () =>
@@ -112,11 +126,12 @@ export default function ImageGallery({ date, section, label }: Props) {
       </div>
 
       {images.length > 0 && (
-        <div className="mt-3 space-y-3">
+        <div className="mt-3 space-y-4">
           {images.map((img, i) => (
             <LargeImage
               key={img.id}
               image={img}
+              perImageNote={perImageNote}
               onOpen={() => setLightboxIndex(i)}
               onDelete={() => deleteImage(img.id)}
             />

@@ -63,7 +63,7 @@ export default function DayView() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6">
+    <div className="mx-auto max-w-7xl px-4 py-6">
       {/* Header */}
       <div className="mb-6 flex items-center justify-between gap-3">
         <Link
@@ -84,7 +84,7 @@ export default function DayView() {
       {/* 1. HTF Analysis */}
       <Section title="1 · HTF Analysis" subtitle="Higher-timeframe bias (Weekly → H4)">
         <ImageGallery date={date} section="htf" label="HTF charts" />
-        <div className="mt-4 space-y-4">
+        <div className="mt-4 max-w-3xl space-y-4">
           <Field label="Bias">
             <input
               value={entry.bias}
@@ -127,25 +127,29 @@ export default function DayView() {
         </div>
       </Section>
 
-      {/* 2. Plan for today */}
+      {/* 2. Plan for today — each chart has its own note below it */}
       <Section
         title="2 · Plan for Today"
-        subtitle="Your game plan — charts + written plan"
+        subtitle="Each chart has its own note below it"
       >
-        <ImageGallery date={date} section="plan" label="plan charts" />
-        <textarea
-          value={entry.plan}
-          onChange={(e) => patch({ plan: e.target.value })}
-          placeholder="Write your plan for today — scenarios, levels, what you'll do if…"
-          rows={4}
-          className={`mt-4 ${inputCls}`}
-        />
+        <ImageGallery date={date} section="plan" label="plan charts" perImageNote />
+        <div className="mt-4 max-w-3xl">
+          <Field label="Overall plan (optional)">
+            <textarea
+              value={entry.plan}
+              onChange={(e) => patch({ plan: e.target.value })}
+              placeholder="General plan for today — scenarios, levels, what you'll do if…"
+              rows={3}
+              className={inputCls}
+            />
+          </Field>
+        </div>
       </Section>
 
       {/* 3. Entry */}
       <Section title="3 · Entry" subtitle="Entry chart + confirmation checklist">
         <ImageGallery date={date} section="entry" label="entry charts" />
-        <div className="mt-4">
+        <div className="mt-4 max-w-3xl">
           <Checklist
             entry={entry}
             onCheck={(key: string, value: Check) =>
@@ -162,18 +166,20 @@ export default function DayView() {
         subtitle="e.g. pyramid entries, trailing stop-loss"
       >
         <ImageGallery date={date} section="management" label="management screenshots" />
-        <textarea
-          value={entry.management}
-          onChange={(e) => patch({ management: e.target.value })}
-          placeholder="How you managed the trade — pyramiding, moving stops, partials…"
-          rows={3}
-          className={`mt-4 ${inputCls}`}
-        />
+        <div className="mt-4 max-w-3xl">
+          <textarea
+            value={entry.management}
+            onChange={(e) => patch({ management: e.target.value })}
+            placeholder="How you managed the trade — pyramiding, moving stops, partials…"
+            rows={3}
+            className={inputCls}
+          />
+        </div>
       </Section>
 
       {/* 5. Result */}
       <Section title="5 · Result">
-        <div className="flex flex-wrap items-center gap-4">
+        <div className="flex max-w-3xl flex-wrap items-center gap-4">
           <div className="flex gap-2">
             {(['Win', 'Loss'] as TradeResult[]).map((r) => {
               const active = entry.result === r
@@ -211,13 +217,15 @@ export default function DayView() {
 
       {/* 6. Additional note */}
       <Section title="6 · Additional Note" subtitle="A reminder to your future self">
-        <textarea
-          value={entry.note}
-          onChange={(e) => patch({ note: e.target.value })}
-          placeholder="What to remember / do differently next time…"
-          rows={3}
-          className={inputCls}
-        />
+        <div className="max-w-3xl">
+          <textarea
+            value={entry.note}
+            onChange={(e) => patch({ note: e.target.value })}
+            placeholder="What to remember / do differently next time…"
+            rows={3}
+            className={inputCls}
+          />
+        </div>
       </Section>
 
       <div className="mt-8 border-t border-slate-800 pt-6">
