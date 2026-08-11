@@ -229,15 +229,6 @@ export default function DayView() {
         className="mt-2 mb-5 w-full border-0 border-b border-transparent bg-transparent px-0 py-1 text-lg text-slate-200 outline-none placeholder:text-slate-600 focus:border-slate-700"
       />
 
-      {/* Paste zone — the primary way to add big images */}
-      <div
-        tabIndex={0}
-        onPaste={onPaste}
-        className="mb-4 flex cursor-text items-center justify-center rounded-xl border-2 border-dashed border-slate-700 px-4 py-6 text-center text-sm text-slate-400 outline-none transition hover:border-slate-500 focus:border-emerald-500 focus:bg-emerald-500/5 focus:text-emerald-300"
-      >
-        Click here, then paste an image (Ctrl/⌘+V) — or add a note below.
-      </div>
-
       {/* The document: blocks in order */}
       <div className="space-y-3">
         {blocks.map((b) =>
@@ -264,9 +255,21 @@ export default function DayView() {
         )}
       </div>
 
+      {/* Paste zone sits BELOW the blocks: each new image stacks above it, so
+          the box stays at the bottom and you can keep pasting without scrolling up. */}
+      <div
+        tabIndex={0}
+        onPaste={onPaste}
+        className="mt-3 flex cursor-text items-center justify-center rounded-xl border-2 border-dashed border-slate-700 px-4 py-6 text-center text-sm text-slate-400 outline-none transition hover:border-slate-500 focus:border-emerald-500 focus:bg-emerald-500/5 focus:text-emerald-300"
+      >
+        {blocks.length > 0
+          ? 'Click here, then paste your next image (Ctrl/⌘+V)'
+          : 'Click here, then paste an image (Ctrl/⌘+V) — or add a note below.'}
+      </div>
+
       <button
         onClick={() => addTextBlock(date)}
-        className="mt-4 w-full rounded-xl border border-dashed border-slate-700 px-4 py-3 text-sm font-medium text-slate-400 hover:border-slate-500 hover:text-slate-200"
+        className="mt-3 w-full rounded-xl border border-dashed border-slate-700 px-4 py-3 text-sm font-medium text-slate-400 hover:border-slate-500 hover:text-slate-200"
       >
         + Add note
       </button>
