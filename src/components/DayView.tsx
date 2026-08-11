@@ -1,60 +1,200 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
-import { getOrCreateEntry, saveEntry, deleteDay } from '../lib/db'
+import { useLiveQuery } from 'dexie-react-hooks'
+import {
+  getOrCreateDay,
+  listBlocks,
+  addImageBlocks,
+  addTextBlock,
+  updateBlockText,
+  deleteBlock,
+  moveBlock,
+  setDayTitle,
+  deleteDay,
+} from '../lib/db'
 import { formatDate } from '../lib/format'
-import type { Check, JournalEntry, MarketPhase, TradeResult } from '../types'
-import ImageGallery from './ImageGallery'
-import Checklist from './Checklist'
+import type { Block } from '../types'
+import Lightbox from './Lightbox'
 
-const PHASES: MarketPhase[] = [
-  'Expansion',
-  'Consolidation',
-  'Retracement',
-  'Reversal',
-]
+/** Manages an object URL for a blob, revoking it when the blob changes/unmounts. */
+function useObjectUrl(blob?: Blob): string {
+  const [url, setUrl] = useState('')
+  useEffect(() => {
+    if (!blob) return
+    const u = URL.createObjectURL(blob)
+    setUrl(u)
+    return () => URL.revokeObjectURL(u)
+  }, [blob])
+  return url
+}
+
+function ImageBlock({
+  block,
+  onOpen,
+  onDelete,
+  onUp,
+  onDown,
+}: {
+  block: Block
+  onOpen: () => void
+  onDelete: () => void
+  onUp: () => void
+  onDown: () => void
+}) {
+  const url = useObjectUrl(block.blob)
+  return (
+    <figure className="group relative overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
+      {url && (
+        <img
+          src={url}
+          alt={block.caption || 'image'}
+          onClick={onOpen}
+          className="block max-h-[85vh] w-full cursor-zoom-in object-contain"
+        />
+      )}
+      <BlockControls onDelete={onDelete} onUp={onUp} onDown={onDown} />
+      {block.caption && (
+        <figcaption className="border-t border-slate-800 px-3 py-1.5 text-xs text-slate-300">
+          {block.caption}
+        </figcaption>
+      )}
+    </figure>
+  )
+}
+
+function TextBlock({
+  block,
+  onDelete,
+  onUp,
+  onDown,
+}: {
+  block: Block
+  onDelete: () => void
+  onUp: () => void
+  onDown: () => void
+}) {
+  const [value, setValue] = useState(block.text ?? '')
+  const ref = useRef<HTMLTextAreaElement | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Keep local text in sync if the block changes underneath us (e.g. sync).
+  useEffect(() => {
+    setValue(block.text ?? '')
+  }, [block.text])
+
+  // Auto-grow to fit content.
+  const grow = useCallback(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [])
+  useEffect(grow, [value, grow])
+
+  function onChange(v: string) {
+    setValue(v)
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(() => updateBlockText(block.id, v), 400)
+  }
+
+  return (
+    <div className="group relative">
+      <textarea
+        ref={ref}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => updateBlockText(block.id, value)}
+        placeholder="Type anything…"
+        rows={2}
+        className="w-full resize-none rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3 text-[15px] leading-relaxed text-slate-100 outline-none focus:border-sky-600"
+      />
+      <BlockControls onDelete={onDelete} onUp={onUp} onDown={onDown} />
+    </div>
+  )
+}
+
+function BlockControls({
+  onDelete,
+  onUp,
+  onDown,
+}: {
+  onDelete: () => void
+  onUp: () => void
+  onDown: () => void
+}) {
+  return (
+    <div className="absolute right-2 top-2 hidden gap-1 group-hover:flex">
+      <button
+        onClick={onUp}
+        title="Move up"
+        className="h-7 w-7 rounded-md bg-black/60 text-sm text-white hover:bg-black/80"
+      >
+        ↑
+      </button>
+      <button
+        onClick={onDown}
+        title="Move down"
+        className="h-7 w-7 rounded-md bg-black/60 text-sm text-white hover:bg-black/80"
+      >
+        ↓
+      </button>
+      <button
+        onClick={onDelete}
+        title="Delete"
+        className="h-7 w-7 rounded-md bg-black/60 text-sm text-white hover:bg-red-600"
+      >
+        ✕
+      </button>
+    </div>
+  )
+}
 
 export default function DayView() {
   const { date = '' } = useParams()
   const navigate = useNavigate()
-  const [entry, setEntry] = useState<JournalEntry | null>(null)
-  const [saved, setSaved] = useState(true)
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [ready, setReady] = useState(false)
+  const [title, setTitle] = useState('')
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
 
   useEffect(() => {
     let alive = true
-    getOrCreateEntry(date).then((e) => {
-      if (alive) setEntry(e)
+    getOrCreateDay(date).then((d) => {
+      if (alive) {
+        setTitle(d.title ?? '')
+        setReady(true)
+      }
     })
     return () => {
       alive = false
     }
   }, [date])
 
-  function patch(partial: Partial<JournalEntry>) {
-    setEntry((prev) => {
-      if (!prev) return prev
-      const next = { ...prev, ...partial }
-      setSaved(false)
-      if (timer.current) clearTimeout(timer.current)
-      timer.current = setTimeout(() => {
-        saveEntry(next).then(() => setSaved(true))
-      }, 400)
-      return next
-    })
-  }
+  const blocks = useLiveQuery(() => listBlocks(date), [date]) ?? []
+  const imageBlocks = blocks.filter((b) => b.type === 'image')
 
-  if (!entry) {
-    return (
-      <div className="mx-auto max-w-3xl px-4 py-16 text-center text-slate-500">
-        Loading…
-      </div>
-    )
-  }
+  const onPaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      const items = e.clipboardData?.items
+      if (!items) return
+      const blobs: Blob[] = []
+      for (const it of items) {
+        if (it.kind === 'file' && it.type.startsWith('image/')) {
+          const f = it.getAsFile()
+          if (f) blobs.push(f)
+        }
+      }
+      if (blobs.length) {
+        e.preventDefault()
+        addImageBlocks(date, blobs)
+      }
+    },
+    [date],
+  )
 
   async function handleDelete() {
     if (
       !window.confirm(
-        `Delete the entire journal for ${formatDate(date)}? This removes all images and notes for this day.`,
+        `Delete everything for ${formatDate(date)}? This removes all images and notes for this day.`,
       )
     )
       return
@@ -62,173 +202,76 @@ export default function DayView() {
     navigate('/')
   }
 
+  if (!ready) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-16 text-center text-slate-500">
+        Loading…
+      </div>
+    )
+  }
+
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6">
+    <div className="mx-auto max-w-5xl px-4 py-6">
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between gap-3">
-        <Link
-          to="/"
-          className="text-sm text-slate-400 hover:text-slate-200"
-        >
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <Link to="/" className="text-sm text-slate-400 hover:text-slate-200">
           ← All dates
         </Link>
-        <span className="text-xs text-slate-500">
-          {saved ? 'All changes saved' : 'Saving…'}
-        </span>
+        <span className="text-xs text-slate-500">Saved automatically</span>
       </div>
 
-      <h1 className="mb-6 text-2xl font-bold text-white">
-        {formatDate(date)}
-      </h1>
+      <h1 className="text-2xl font-bold text-white">{formatDate(date)}</h1>
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onBlur={() => setDayTitle(date, title)}
+        placeholder="Add a title (optional)…"
+        className="mt-2 mb-5 w-full border-0 border-b border-transparent bg-transparent px-0 py-1 text-lg text-slate-200 outline-none placeholder:text-slate-600 focus:border-slate-700"
+      />
 
-      {/* 1. HTF Analysis */}
-      <Section title="1 · HTF Analysis" subtitle="Higher-timeframe bias (Weekly → H4)">
-        <ImageGallery date={date} section="htf" label="HTF charts" />
-        <div className="mt-4 max-w-3xl space-y-4">
-          <Field label="Bias">
-            <input
-              value={entry.bias}
-              onChange={(e) => patch({ bias: e.target.value })}
-              placeholder="e.g. Bullish — expecting continuation after Weekly OB tap"
-              className={inputCls}
-            />
-          </Field>
-
-          <Field label="Market Phase">
-            <div className="flex flex-wrap gap-2">
-              {PHASES.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() =>
-                    patch({ marketPhase: entry.marketPhase === p ? '' : p })
-                  }
-                  className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
-                    entry.marketPhase === p
-                      ? 'bg-sky-600 text-white'
-                      : 'border border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-500'
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-          </Field>
-
-          <Field label="Target for today">
-            <textarea
-              value={entry.target}
-              onChange={(e) => patch({ target: e.target.value })}
-              placeholder="Draw on liquidity / target level for today…"
-              rows={2}
-              className={inputCls}
-            />
-          </Field>
-        </div>
-      </Section>
-
-      {/* 2. Plan for today — each chart has its own note below it */}
-      <Section
-        title="2 · Plan for Today"
-        subtitle="Each chart has its own note below it"
+      {/* Paste zone — the primary way to add big images */}
+      <div
+        tabIndex={0}
+        onPaste={onPaste}
+        className="mb-4 flex cursor-text items-center justify-center rounded-xl border-2 border-dashed border-slate-700 px-4 py-6 text-center text-sm text-slate-400 outline-none transition hover:border-slate-500 focus:border-emerald-500 focus:bg-emerald-500/5 focus:text-emerald-300"
       >
-        <ImageGallery date={date} section="plan" label="plan charts" perImageNote />
-        <div className="mt-4 max-w-3xl">
-          <Field label="Overall plan (optional)">
-            <textarea
-              value={entry.plan}
-              onChange={(e) => patch({ plan: e.target.value })}
-              placeholder="General plan for today — scenarios, levels, what you'll do if…"
-              rows={3}
-              className={inputCls}
+        Click here, then paste an image (Ctrl/⌘+V) — or add a note below.
+      </div>
+
+      {/* The document: blocks in order */}
+      <div className="space-y-3">
+        {blocks.map((b) =>
+          b.type === 'image' ? (
+            <ImageBlock
+              key={b.id}
+              block={b}
+              onOpen={() =>
+                setLightboxIndex(imageBlocks.findIndex((im) => im.id === b.id))
+              }
+              onDelete={() => deleteBlock(b.id)}
+              onUp={() => moveBlock(b.id, 'up')}
+              onDown={() => moveBlock(b.id, 'down')}
             />
-          </Field>
-        </div>
-      </Section>
+          ) : (
+            <TextBlock
+              key={b.id}
+              block={b}
+              onDelete={() => deleteBlock(b.id)}
+              onUp={() => moveBlock(b.id, 'up')}
+              onDown={() => moveBlock(b.id, 'down')}
+            />
+          ),
+        )}
+      </div>
 
-      {/* 3. Entry */}
-      <Section title="3 · Entry" subtitle="Entry chart + confirmation checklist">
-        <ImageGallery date={date} section="entry" label="entry charts" />
-        <div className="mt-4 max-w-3xl">
-          <Checklist
-            entry={entry}
-            onCheck={(key: string, value: Check) =>
-              patch({ checklist: { ...entry.checklist, [key]: value } })
-            }
-            onNote={(field, value) => patch({ [field]: value })}
-          />
-        </div>
-      </Section>
-
-      {/* 4. Intratrade management */}
-      <Section
-        title="4 · Intratrade Management"
-        subtitle="e.g. pyramid entries, trailing stop-loss"
+      <button
+        onClick={() => addTextBlock(date)}
+        className="mt-4 w-full rounded-xl border border-dashed border-slate-700 px-4 py-3 text-sm font-medium text-slate-400 hover:border-slate-500 hover:text-slate-200"
       >
-        <ImageGallery date={date} section="management" label="management screenshots" />
-        <div className="mt-4 max-w-3xl">
-          <textarea
-            value={entry.management}
-            onChange={(e) => patch({ management: e.target.value })}
-            placeholder="How you managed the trade — pyramiding, moving stops, partials…"
-            rows={3}
-            className={inputCls}
-          />
-        </div>
-      </Section>
+        + Add note
+      </button>
 
-      {/* 5. Result */}
-      <Section title="5 · Result">
-        <div className="flex max-w-3xl flex-wrap items-center gap-4">
-          <div className="flex gap-2">
-            {(['Win', 'Loss'] as TradeResult[]).map((r) => {
-              const active = entry.result === r
-              const tone =
-                r === 'Win'
-                  ? active
-                    ? 'bg-emerald-600 text-white'
-                    : 'border border-emerald-700/50 text-emerald-300 hover:bg-emerald-600/10'
-                  : active
-                    ? 'bg-red-600 text-white'
-                    : 'border border-red-700/50 text-red-300 hover:bg-red-600/10'
-              return (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => patch({ result: active ? '' : r })}
-                  className={`rounded-lg px-6 py-2 text-sm font-bold transition ${tone}`}
-                >
-                  {r}
-                </button>
-              )
-            })}
-          </div>
-          <Field label="Profit / Loss">
-            <input
-              value={entry.pnl}
-              onChange={(e) => patch({ pnl: e.target.value })}
-              inputMode="decimal"
-              placeholder="e.g. +250 or -80"
-              className={`${inputCls} w-40`}
-            />
-          </Field>
-        </div>
-      </Section>
-
-      {/* 6. Additional note */}
-      <Section title="6 · Additional Note" subtitle="A reminder to your future self">
-        <div className="max-w-3xl">
-          <textarea
-            value={entry.note}
-            onChange={(e) => patch({ note: e.target.value })}
-            placeholder="What to remember / do differently next time…"
-            rows={3}
-            className={inputCls}
-          />
-        </div>
-      </Section>
-
-      <div className="mt-8 border-t border-slate-800 pt-6">
+      <div className="mt-10 border-t border-slate-800 pt-6">
         <button
           onClick={handleDelete}
           className="text-sm text-red-400/80 hover:text-red-400"
@@ -236,48 +279,15 @@ export default function DayView() {
           Delete this day
         </button>
       </div>
-    </div>
-  )
-}
 
-const inputCls =
-  'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-sky-500'
-
-function Section({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string
-  subtitle?: string
-  children: React.ReactNode
-}) {
-  return (
-    <section className="mb-5 rounded-2xl border border-slate-800 bg-slate-900/40 p-5">
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold text-white">{title}</h2>
-        {subtitle && (
-          <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>
-        )}
-      </div>
-      {children}
-    </section>
-  )
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string
-  children: React.ReactNode
-}) {
-  return (
-    <div>
-      <label className="mb-1.5 block text-xs font-medium text-slate-400">
-        {label}
-      </label>
-      {children}
+      {lightboxIndex !== null && imageBlocks[lightboxIndex] && (
+        <Lightbox
+          images={imageBlocks}
+          index={lightboxIndex}
+          onIndexChange={setLightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
     </div>
   )
 }
