@@ -30,6 +30,12 @@ jobs:
         env:
           # Repo name (with its trailing dash) so asset URLs resolve on Pages
           VITE_BASE: /TradeJournal-/
+          # Cloud sync (Supabase). Set these as repository Actions Variables
+          # (Settings → Secrets and variables → Actions → Variables). Both are
+          # safe to be public — Row-Level Security protects the data. If left
+          # unset, the app builds in local-only mode with sync disabled.
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

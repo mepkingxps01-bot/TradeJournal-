@@ -2,57 +2,55 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../lib/db'
-import { formatDate, formatMoney, parsePnl, todayISO } from '../lib/format'
-import type { JournalEntry } from '../types'
+import { formatDate, todayISO } from '../lib/format'
+import SyncBar from './SyncBar'
+import { isSupabaseConfigured } from '../lib/supabase'
 
-function ResultBadge({ result }: { result: JournalEntry['result'] }) {
-  if (result === 'Win')
-    return (
-      <span className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
-        Win
-      </span>
-    )
-  if (result === 'Loss')
-    return (
-      <span className="rounded-full bg-red-500/15 px-2.5 py-0.5 text-xs font-semibold text-red-300">
-        Loss
-      </span>
-    )
-  return (
-    <span className="rounded-full bg-slate-700/50 px-2.5 py-0.5 text-xs font-semibold text-slate-400">
-      Open
-    </span>
-  )
+interface DaySummary {
+  date: string
+  images: number
+  snippet: string
+  title: string
 }
 
 export default function DateList() {
   const navigate = useNavigate()
   const [pick, setPick] = useState(todayISO())
 
-  const entries =
+  const days: DaySummary[] =
     useLiveQuery(async () => {
-      const all = await db.entries.toArray()
-      return all.sort((a, b) => (a.date < b.date ? 1 : -1))
+      const entries = await db.entries.toArray()
+      const summaries = await Promise.all(
+        entries.map(async (e) => {
+          const blocks = await db.blocks.where('entryDate').equals(e.date).toArray()
+          const images = blocks.filter((b) => b.type === 'image').length
+          const text = blocks
+            .filter((b) => b.type === 'text' && (b.text ?? '').trim())
+            .map((b) => (b.text ?? '').trim())
+            .join(' · ')
+          return {
+            date: e.date,
+            images,
+            title: (e.title ?? '').trim(),
+            snippet: text.slice(0, 120),
+          }
+        }),
+      )
+      return summaries.sort((a, b) => (a.date < b.date ? 1 : -1))
     }, []) ?? []
 
-  const decided = entries.filter((e) => e.result)
-  const wins = decided.filter((e) => e.result === 'Win').length
-  const losses = decided.filter((e) => e.result === 'Loss').length
-  const net = entries.reduce((s, e) => s + parsePnl(e.pnl), 0)
-  const winRate = decided.length
-    ? Math.round((wins / decided.length) * 100)
-    : 0
-
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8">
+    <div className="mx-auto max-w-3xl px-4 py-8">
       <header className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight text-white">
           📈 Trade Journal
         </h1>
         <p className="mt-1 text-sm text-slate-400">
-          Pick a date to review or log your day.
+          Pick a date, then paste your charts and type your notes.
         </p>
       </header>
+
+      <SyncBar />
 
       {/* Open / create a day */}
       <div className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
@@ -75,96 +73,48 @@ export default function DateList() {
         </button>
       </div>
 
-      {/* Stats */}
-      {entries.length > 0 && (
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat label="Days logged" value={String(entries.length)} />
-          <Stat label="Win rate" value={`${winRate}%`} sub={`${wins}W · ${losses}L`} />
-          <Stat
-            label="Net P&L"
-            value={formatMoney(net)}
-            tone={net > 0 ? 'green' : net < 0 ? 'red' : 'neutral'}
-          />
-          <Stat label="Decided" value={String(decided.length)} />
-        </div>
-      )}
-
       {/* Date list */}
-      {entries.length === 0 ? (
+      {days.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-700 py-16 text-center text-slate-500">
           No entries yet. Choose a date above and start your first journal.
         </div>
       ) : (
         <ul className="space-y-2">
-          {entries.map((e) => {
-            const pnl = parsePnl(e.pnl)
-            return (
-              <li key={e.date}>
-                <button
-                  onClick={() => navigate(`/day/${e.date}`)}
-                  className="flex w-full items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3 text-left transition hover:border-slate-600 hover:bg-slate-900"
-                >
-                  <div className="min-w-0">
-                    <div className="font-medium text-slate-100">
-                      {formatDate(e.date)}
-                    </div>
-                    <div className="mt-0.5 truncate text-xs text-slate-500">
-                      {e.marketPhase || 'No phase'}
-                      {e.bias ? ` · ${e.bias}` : ''}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-3">
-                    {e.pnl && (
-                      <span
-                        className={`text-sm font-semibold ${
-                          pnl > 0
-                            ? 'text-emerald-400'
-                            : pnl < 0
-                              ? 'text-red-400'
-                              : 'text-slate-400'
-                        }`}
-                      >
-                        {formatMoney(pnl)}
+          {days.map((d) => (
+            <li key={d.date}>
+              <button
+                onClick={() => navigate(`/day/${d.date}`)}
+                className="flex w-full items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3 text-left transition hover:border-slate-600 hover:bg-slate-900"
+              >
+                <div className="min-w-0">
+                  <div className="font-medium text-slate-100">
+                    {formatDate(d.date)}
+                    {d.title && (
+                      <span className="ml-2 font-normal text-slate-400">
+                        — {d.title}
                       </span>
                     )}
-                    <ResultBadge result={e.result} />
                   </div>
-                </button>
-              </li>
-            )
-          })}
+                  <div className="mt-0.5 truncate text-xs text-slate-500">
+                    {d.snippet || 'No notes yet'}
+                  </div>
+                </div>
+                {d.images > 0 && (
+                  <span className="shrink-0 rounded-full bg-slate-800 px-2.5 py-0.5 text-xs font-medium text-slate-300">
+                    🖼 {d.images}
+                  </span>
+                )}
+              </button>
+            </li>
+          ))}
         </ul>
       )}
 
       <footer className="mt-10 text-center text-xs text-slate-600">
-        Data is stored locally in this browser (IndexedDB).
+        {isSupabaseConfigured
+          ? 'Stored on this device and synced to the cloud when signed in.'
+          : 'Data is stored locally in this browser (IndexedDB).'}
       </footer>
-    </div>
-  )
-}
-
-function Stat({
-  label,
-  value,
-  sub,
-  tone = 'neutral',
-}: {
-  label: string
-  value: string
-  sub?: string
-  tone?: 'green' | 'red' | 'neutral'
-}) {
-  const color =
-    tone === 'green'
-      ? 'text-emerald-400'
-      : tone === 'red'
-        ? 'text-red-400'
-        : 'text-slate-100'
-  return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3">
-      <div className="text-xs text-slate-400">{label}</div>
-      <div className={`mt-1 text-xl font-bold ${color}`}>{value}</div>
-      {sub && <div className="mt-0.5 text-xs text-slate-500">{sub}</div>}
     </div>
   )
 }

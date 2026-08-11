@@ -1,73 +1,39 @@
-export type MarketPhase =
-  | 'Expansion'
-  | 'Consolidation'
-  | 'Retracement'
-  | 'Reversal'
+// ---------------------------------------------------------------------------
+// A day is a plain, doc-like page: an ordered stack of blocks. Each block is
+// either free text you type, or a big pasted image. That's the whole model.
+// ---------------------------------------------------------------------------
 
-export type TradeResult = 'Win' | 'Loss'
+export type BlockType = 'text' | 'image'
 
-/** Checklist state: 'yes' = green check, 'no' = red X, null = not answered. */
-export type Check = 'yes' | 'no' | null
-
-export type ImageSection = 'htf' | 'plan' | 'entry' | 'management'
-
-export interface StoredImage {
+export interface Block {
   id: string
+  /** YYYY-MM-DD — the day this block belongs to. */
   entryDate: string
-  section: ImageSection
-  blob: Blob
-  caption: string
+  type: BlockType
+  /** Position within the day (ascending). */
   order: number
-  createdAt: number
-}
-
-export interface JournalEntry {
-  /** YYYY-MM-DD — primary key, one entry per trading day. */
-  date: string
-
-  // 1. HTF analysis
-  bias: string
-  marketPhase: MarketPhase | ''
-  target: string
-
-  // 2. Plan for today (manual typing)
-  plan: string
-
-  // 3. Entry checklist (keyed by CHECKLIST_ITEMS[].key)
-  checklist: Record<string, Check>
-  pdArraysNote: string
-  expectedRR: string
-
-  // 3. Intratrade management
-  management: string
-
-  // 4. Result
-  result: TradeResult | ''
-  pnl: string
-
-  // 5. Reminder note
-  note: string
-
+  /** Text blocks only. */
+  text?: string
+  /** Image blocks only. */
+  blob?: Blob
+  /** Optional caption under an image. */
+  caption?: string
   createdAt: number
   updatedAt: number
 }
 
-export function emptyEntry(date: string): JournalEntry {
+export interface DayEntry {
+  /** YYYY-MM-DD — primary key, one entry per day. */
+  date: string
+  /** Optional free-text title for the day. */
+  title?: string
+  createdAt: number
+  updatedAt: number
+  /** Set once the day has been migrated from the old structured format. */
+  migrated?: boolean
+}
+
+export function emptyDay(date: string): DayEntry {
   const now = Date.now()
-  return {
-    date,
-    bias: '',
-    marketPhase: '',
-    target: '',
-    plan: '',
-    checklist: {},
-    pdArraysNote: '',
-    expectedRR: '',
-    management: '',
-    result: '',
-    pnl: '',
-    note: '',
-    createdAt: now,
-    updatedAt: now,
-  }
+  return { date, title: '', createdAt: now, updatedAt: now, migrated: true }
 }
