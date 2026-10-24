@@ -65,7 +65,7 @@ export default function Home() {
                   to={`/p/${pair}`}
                   className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:border-slate-500"
                 >
-                  ทุกสัปดาห์
+                  📅 ปฏิทิน
                 </Link>
               </div>
             </div>

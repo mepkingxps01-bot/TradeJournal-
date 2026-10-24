@@ -5,6 +5,7 @@ import { db } from '../../lib/db'
 import { currentWeekStart, mondayOf, todayISO, weekLabel } from '../../lib/format'
 import { computeStats } from '../../lib/journal'
 import { DAY_NAMES, PAIRS } from '../../lib/template'
+import Calendar from './Calendar'
 import { StatsLine, verdictMark } from './WeekPage'
 
 /** One pair's journal: its weeks, newest first, and its all-time stats. */
@@ -67,6 +68,8 @@ export default function PairHome() {
           </button>
         </div>
       </div>
+
+      <Calendar pair={pair} />
 
       {all.graded + all.trades > 0 && (
         <section className="mb-6 rounded-xl border border-slate-800 bg-slate-900/30 p-4">
