@@ -39,8 +39,14 @@ export interface DayEntry {
 // in lib/template.ts; pasted charts live in the `shots` table.
 // ---------------------------------------------------------------------------
 
+// Each pair (XAUUSD, NQ) is its own journal, so weeks, days and charts all
+// carry the pair in their keys.
+
 export interface Week {
-  /** YYYY-MM-DD of the week's Monday — primary key. */
+  /** `${pair}|${weekStart}` — primary key. */
+  id: string
+  pair: string
+  /** YYYY-MM-DD of the week's Monday. */
   weekStart: string
   fields: Record<string, string>
   createdAt: number
@@ -51,8 +57,6 @@ export type TradeResult = '' | 'win' | 'loss' | 'be'
 
 export interface Trade {
   id: string
-  /** One of MARKETS; missing on trades made before pairs existed. */
-  pair?: string
   reason: string
   setup: string
   result: TradeResult
@@ -61,11 +65,11 @@ export interface Trade {
 }
 
 export interface Day {
-  /** `${weekStart}:${dow}` — dow 0 = Mon … 4 = Fri. */
+  /** `${pair}|${weekStart}|${dow}` — dow 0 = Mon … 4 = Fri. */
   id: string
+  pair: string
   weekStart: string
   dow: number
-  markets: string[]
   /** '' until picked; otherwise one of NARRATIVE_OPTIONS. */
   narrative: string
   mistakes: string[]
@@ -78,7 +82,7 @@ export interface Day {
 /** A pasted chart, attached to one question (`slot`) on a week or day page. */
 export interface Shot {
   id: string
-  /** `week:<weekStart>` or `day:<weekStart>:<dow>`. */
+  /** `week:<pair>:<weekStart>` or `day:<pair>:<weekStart>:<dow>`. */
   owner: string
   /** Question key, or `trade:<tradeId>`. */
   slot: string

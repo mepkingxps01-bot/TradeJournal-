@@ -1,36 +1,44 @@
 import { db } from './db'
 import { parsePnl } from './format'
-import { NARRATIVE_RIGHT, NARRATIVE_TIMING, normMarket } from './template'
+import { NARRATIVE_RIGHT, NARRATIVE_TIMING } from './template'
 import type { Day, Shot, Trade } from '../types'
 
 function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
 }
 
-export const dayId = (weekStart: string, dow: number) => `${weekStart}:${dow}`
-export const weekOwner = (weekStart: string) => `week:${weekStart}`
-export const dayOwner = (weekStart: string, dow: number) => `day:${weekStart}:${dow}`
+export const weekId = (pair: string, weekStart: string) => `${pair}|${weekStart}`
+export const dayId = (pair: string, weekStart: string, dow: number) => `${pair}|${weekStart}|${dow}`
+export const weekOwner = (pair: string, weekStart: string) => `week:${pair}:${weekStart}`
+export const dayOwner = (pair: string, weekStart: string, dow: number) => `day:${pair}:${weekStart}:${dow}`
 
 // ---------------------------------------------------------------------------
 // Weeks & days
 // ---------------------------------------------------------------------------
 
-export async function ensureWeek(weekStart: string): Promise<void> {
-  if (await db.weeks.get(weekStart)) return
-  const now = Date.now()
-  await db.weeks.put({ weekStart, fields: {}, createdAt: now, updatedAt: now })
+export function listDays(pair: string, weekStart: string): Promise<Day[]> {
+  return db.pdays.where('[pair+weekStart]').equals([pair, weekStart]).toArray()
 }
 
-async function ensureDay(weekStart: string, dow: number): Promise<string> {
-  const id = dayId(weekStart, dow)
-  if (!(await db.days.get(id))) {
+async function ensureWeek(pair: string, weekStart: string): Promise<string> {
+  const id = weekId(pair, weekStart)
+  if (!(await db.pweeks.get(id))) {
     const now = Date.now()
-    await ensureWeek(weekStart)
-    await db.days.put({
+    await db.pweeks.put({ id, pair, weekStart, fields: {}, createdAt: now, updatedAt: now })
+  }
+  return id
+}
+
+async function ensureDay(pair: string, weekStart: string, dow: number): Promise<string> {
+  const id = dayId(pair, weekStart, dow)
+  if (!(await db.pdays.get(id))) {
+    const now = Date.now()
+    await ensureWeek(pair, weekStart)
+    await db.pdays.put({
       id,
+      pair,
       weekStart,
       dow,
-      markets: [],
       narrative: '',
       mistakes: [],
       fields: {},
@@ -42,38 +50,39 @@ async function ensureDay(weekStart: string, dow: number): Promise<string> {
   return id
 }
 
-export async function setWeekField(weekStart: string, key: string, value: string) {
-  await ensureWeek(weekStart)
-  await db.weeks.update(weekStart, (w) => {
+export async function setWeekField(pair: string, weekStart: string, key: string, value: string) {
+  const id = await ensureWeek(pair, weekStart)
+  await db.pweeks.update(id, (w) => {
     w.fields[key] = value
     w.updatedAt = Date.now()
   })
 }
 
-export async function setDayField(weekStart: string, dow: number, key: string, value: string) {
-  const id = await ensureDay(weekStart, dow)
-  await db.days.update(id, (d) => {
+export async function setDayField(pair: string, weekStart: string, dow: number, key: string, value: string) {
+  const id = await ensureDay(pair, weekStart, dow)
+  await db.pdays.update(id, (d) => {
     d.fields[key] = value
     d.updatedAt = Date.now()
   })
 }
 
 export async function patchDay(
+  pair: string,
   weekStart: string,
   dow: number,
-  patch: Partial<Pick<Day, 'markets' | 'narrative' | 'mistakes'>>,
+  patch: Partial<Pick<Day, 'narrative' | 'mistakes'>>,
 ) {
-  const id = await ensureDay(weekStart, dow)
-  await db.days.update(id, { ...patch, updatedAt: Date.now() })
+  const id = await ensureDay(pair, weekStart, dow)
+  await db.pdays.update(id, { ...patch, updatedAt: Date.now() })
 }
 
-/** Delete a whole week: its days and every pasted chart. */
-export async function deleteWeek(weekStart: string) {
-  await db.transaction('rw', db.weeks, db.days, db.shots, async () => {
-    await db.shots.where('owner').startsWith(`day:${weekStart}:`).delete()
-    await db.shots.where('owner').equals(weekOwner(weekStart)).delete()
-    await db.days.where('weekStart').equals(weekStart).delete()
-    await db.weeks.delete(weekStart)
+/** Delete a whole week of one pair: its days and every pasted chart. */
+export async function deleteWeek(pair: string, weekStart: string) {
+  await db.transaction('rw', db.pweeks, db.pdays, db.shots, async () => {
+    await db.shots.where('owner').startsWith(`day:${pair}:${weekStart}:`).delete()
+    await db.shots.where('owner').equals(weekOwner(pair, weekStart)).delete()
+    await db.pdays.where('[pair+weekStart]').equals([pair, weekStart]).delete()
+    await db.pweeks.delete(weekId(pair, weekStart))
   })
 }
 
@@ -81,41 +90,31 @@ export async function deleteWeek(weekStart: string) {
 // Trades (stored inline on the day)
 // ---------------------------------------------------------------------------
 
-async function editTrades(weekStart: string, dow: number, fn: (t: Trade[]) => Trade[]) {
-  const id = await ensureDay(weekStart, dow)
-  await db.transaction('rw', db.days, async () => {
-    const day = await db.days.get(id)
+async function editTrades(pair: string, weekStart: string, dow: number, fn: (t: Trade[]) => Trade[]) {
+  const id = await ensureDay(pair, weekStart, dow)
+  await db.transaction('rw', db.pdays, async () => {
+    const day = await db.pdays.get(id)
     if (!day) return
-    await db.days.update(id, { trades: fn(day.trades), updatedAt: Date.now() })
+    await db.pdays.update(id, { trades: fn(day.trades), updatedAt: Date.now() })
   })
 }
 
-/** New trade; starts on the day's pair when exactly one is picked. */
-export async function addTrade(weekStart: string, dow: number) {
-  const day = await db.days.get(dayId(weekStart, dow))
-  const markets = (day?.markets ?? []).map(normMarket)
-  const pair = markets.length === 1 ? markets[0] : ''
-  return editTrades(weekStart, dow, (t) => [
+export function addTrade(pair: string, weekStart: string, dow: number) {
+  return editTrades(pair, weekStart, dow, (t) => [
     ...t,
-    { id: uid(), pair, reason: '', setup: '', result: '', pnl: '' },
+    { id: uid(), reason: '', setup: '', result: '', pnl: '' },
   ])
 }
 
-export async function updateTrade(weekStart: string, dow: number, id: string, patch: Partial<Trade>) {
-  await editTrades(weekStart, dow, (t) => t.map((x) => (x.id === id ? { ...x, ...patch } : x)))
-  // Trading a pair means the day covered it, so tick it in the day's markets too.
-  if (patch.pair) {
-    const day = await db.days.get(dayId(weekStart, dow))
-    const markets = (day?.markets ?? []).map(normMarket)
-    if (!markets.includes(patch.pair)) await patchDay(weekStart, dow, { markets: [...markets, patch.pair] })
-  }
+export function updateTrade(pair: string, weekStart: string, dow: number, id: string, patch: Partial<Trade>) {
+  return editTrades(pair, weekStart, dow, (t) => t.map((x) => (x.id === id ? { ...x, ...patch } : x)))
 }
 
-export async function deleteTrade(weekStart: string, dow: number, id: string) {
-  await editTrades(weekStart, dow, (t) => t.filter((x) => x.id !== id))
+export async function deleteTrade(pair: string, weekStart: string, dow: number, id: string) {
+  await editTrades(pair, weekStart, dow, (t) => t.filter((x) => x.id !== id))
   await db.shots
     .where('[owner+slot]')
-    .equals([dayOwner(weekStart, dow), `trade:${id}`])
+    .equals([dayOwner(pair, weekStart, dow), `trade:${id}`])
     .delete()
 }
 
@@ -168,14 +167,11 @@ export interface Stats {
   pnl: number
   /** Mistake → number of days it was ticked, most frequent first. */
   mistakes: [string, number][]
-  /** Per traded pair, most trades first; trades without a pair are left out. */
-  pairs: { pair: string; trades: number; wins: number; losses: number; pnl: number }[]
 }
 
 export function computeStats(days: Day[]): Stats {
-  const s: Stats = { graded: 0, right: 0, rightLate: 0, trades: 0, wins: 0, losses: 0, pnl: 0, mistakes: [], pairs: [] }
+  const s: Stats = { graded: 0, right: 0, rightLate: 0, trades: 0, wins: 0, losses: 0, pnl: 0, mistakes: [] }
   const counts = new Map<string, number>()
-  const pairs = new Map<string, Stats['pairs'][number]>()
   for (const d of days) {
     if (d.narrative) s.graded++
     if (d.narrative === NARRATIVE_RIGHT) s.right++
@@ -186,18 +182,9 @@ export function computeStats(days: Day[]): Stats {
       if (t.result === 'win') s.wins++
       if (t.result === 'loss') s.losses++
       s.pnl += parsePnl(t.pnl)
-      if (t.pair) {
-        const p = pairs.get(t.pair) ?? { pair: t.pair, trades: 0, wins: 0, losses: 0, pnl: 0 }
-        p.trades++
-        if (t.result === 'win') p.wins++
-        if (t.result === 'loss') p.losses++
-        p.pnl += parsePnl(t.pnl)
-        pairs.set(t.pair, p)
-      }
     }
   }
   s.mistakes = [...counts.entries()].sort((a, b) => b[1] - a[1])
-  s.pairs = [...pairs.values()].sort((a, b) => b.trades - a.trades)
   return s
 }
 

@@ -6,8 +6,10 @@ import {
   computeStats,
   dayPnl,
   deleteWeek,
+  listDays,
   patchDay,
   setWeekField,
+  weekId,
   weekOwner,
   type Stats,
 } from '../../lib/journal'
@@ -16,9 +18,9 @@ import {
   NARRATIVE_OPTIONS,
   NARRATIVE_RIGHT,
   NARRATIVE_TIMING,
+  PAIRS,
   WEEK_PREP,
   WEEK_REFLECTION,
-  normMarket,
 } from '../../lib/template'
 import type { Day } from '../../types'
 import DayTab from './DayTab'
@@ -69,36 +71,23 @@ export function StatsLine({ s, of }: { s: Stats; of?: number }) {
   )
 }
 
-/** One chip per traded pair: trades, win rate, P&L. */
-export function PairStats({ s }: { s: Stats }) {
-  if (!s.pairs.length) return null
-  return (
-    <div className="flex flex-wrap gap-2">
-      {s.pairs.map((p) => (
-        <span key={p.pair} className="rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-1.5 text-sm">
-          <b className="text-sky-200">{p.pair}</b>
-          <span className="text-slate-400">
-            {' '}
-            · {p.trades} ไม้
-            {p.wins + p.losses > 0 && ` · ชนะ ${Math.round((p.wins / (p.wins + p.losses)) * 100)}%`} ·{' '}
-          </span>
-          <b className={p.pnl > 0 ? 'text-emerald-400' : p.pnl < 0 ? 'text-rose-400' : 'text-white'}>
-            {formatMoney(p.pnl)}
-          </b>
-        </span>
-      ))}
-    </div>
-  )
-}
-
-function Scoreboard({ ws, days, onOpen }: { ws: string; days: Day[]; onOpen: (dow: number) => void }) {
+function Scoreboard({
+  pair,
+  ws,
+  days,
+  onOpen,
+}: {
+  pair: string
+  ws: string
+  days: Day[]
+  onOpen: (dow: number) => void
+}) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[560px] text-left text-sm">
+      <table className="w-full min-w-[480px] text-left text-sm">
         <thead className="text-xs text-slate-400">
           <tr className="border-b border-slate-800">
             <th className="py-2 pr-3 font-medium">วัน</th>
-            <th className="py-2 pr-3 font-medium">ตลาด</th>
             <th className="py-2 pr-3 font-medium">Narrative</th>
             <th className="py-2 pr-3 font-medium">พลาดเพราะ</th>
             <th className="py-2 pr-3 font-medium">ไม้</th>
@@ -116,11 +105,10 @@ function Scoreboard({ ws, days, onOpen }: { ws: string; days: Day[]; onOpen: (do
                     {name.short} {shortDate(addDaysISO(ws, dow))}
                   </button>
                 </td>
-                <td className="py-2 pr-3 text-slate-300">{d?.markets.map(normMarket).join(', ') || '–'}</td>
                 <td className="py-2 pr-3">
                   <select
                     value={d?.narrative ?? ''}
-                    onChange={(e) => patchDay(ws, dow, { narrative: e.target.value })}
+                    onChange={(e) => patchDay(pair, ws, dow, { narrative: e.target.value })}
                     className={`rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-sky-500 ${
                       verdictMark(d?.narrative ?? '').cls
                     }`}
@@ -147,9 +135,21 @@ function Scoreboard({ ws, days, onOpen }: { ws: string; days: Day[]; onOpen: (do
   )
 }
 
-function WeekTab({ ws, fields, days, onOpen }: { ws: string; fields: Record<string, string>; days: Day[]; onOpen: (dow: number) => void }) {
+function WeekTab({
+  pair,
+  ws,
+  fields,
+  days,
+  onOpen,
+}: {
+  pair: string
+  ws: string
+  fields: Record<string, string>
+  days: Day[]
+  onOpen: (dow: number) => void
+}) {
   const navigate = useNavigate()
-  const owner = weekOwner(ws)
+  const owner = weekOwner(pair, ws)
   const stats = computeStats(days)
   const field = (key: string, label: string, options?: string[]) => (
     <QuestionField
@@ -157,16 +157,16 @@ function WeekTab({ ws, fields, days, onOpen }: { ws: string; fields: Record<stri
       label={label}
       options={options}
       value={fields[key] ?? ''}
-      onSave={(v) => setWeekField(ws, key, v)}
+      onSave={(v) => setWeekField(pair, ws, key, v)}
       owner={owner}
       slot={key}
     />
   )
 
   async function remove() {
-    if (!window.confirm(`ลบทั้งสัปดาห์ ${weekLabel(ws)}? ข้อความและรูปทั้งหมดของสัปดาห์นี้จะหายไป`)) return
-    await deleteWeek(ws)
-    navigate('/')
+    if (!window.confirm(`ลบ ${pair} สัปดาห์ ${weekLabel(ws)}? ข้อความและรูปทั้งหมดของสัปดาห์นี้จะหายไป`)) return
+    await deleteWeek(pair, ws)
+    navigate(`/p/${pair}`)
   }
 
   return (
@@ -183,8 +183,7 @@ function WeekTab({ ws, fields, days, onOpen }: { ws: string; fields: Record<stri
 
       <Card title="Scoreboard">
         <StatsLine s={stats} />
-        <PairStats s={stats} />
-        <Scoreboard ws={ws} days={days} onOpen={onOpen} />
+        <Scoreboard pair={pair} ws={ws} days={days} onOpen={onOpen} />
         <p className="text-xs text-slate-500">
           เลือก Narrative ได้ที่นี่หรือท้ายหน้าแต่ละวัน · P&L รวมจาก Trades ของวันนั้น
         </p>
@@ -211,7 +210,7 @@ function WeekTab({ ws, fields, days, onOpen }: { ws: string; fields: Record<stri
 
       <div className="border-t border-slate-800 pt-6">
         <button onClick={remove} className="text-sm text-red-400/80 hover:text-red-400">
-          ลบสัปดาห์นี้
+          ลบสัปดาห์นี้ ({pair})
         </button>
       </div>
     </div>
@@ -219,19 +218,22 @@ function WeekTab({ ws, fields, days, onOpen }: { ws: string; fields: Record<stri
 }
 
 export default function WeekPage() {
-  const { ws = '', day } = useParams()
+  const { pair = '', ws = '', day } = useParams()
   const navigate = useNavigate()
-  const week = useLiveQuery(() => db.weeks.get(ws), [ws])
-  const days = useLiveQuery(() => db.days.where('weekStart').equals(ws).toArray(), [ws])
+  const week = useLiveQuery(() => db.pweeks.get(weekId(pair, ws)), [pair, ws])
+  const days = useLiveQuery(() => listDays(pair, ws), [pair, ws])
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(ws)) return <Navigate to="/" replace />
+  if (!PAIRS.includes(pair)) return <Navigate to="/" replace />
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ws)) return <Navigate to={`/p/${pair}`} replace />
   const dow = day ? TAB_KEYS.indexOf(day) : -1
-  if (day && dow < 0) return <Navigate to={`/week/${ws}`} replace />
+  const base = `/p/${pair}/week/${ws}`
+  if (day && dow < 0) return <Navigate to={base} replace />
   if (days === undefined) {
     return <div className="mx-auto max-w-3xl px-4 py-16 text-center text-slate-500">Loading…</div>
   }
 
-  const open = (d: number) => navigate(`/week/${ws}/${TAB_KEYS[d]}`)
+  const open = (d: number) => navigate(`${base}/${TAB_KEYS[d]}`)
+  const tail = day ? `/${day}` : ''
   const tabCls = (active: boolean) =>
     `shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
       active ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
@@ -240,25 +242,42 @@ export default function WeekPage() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-6">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <Link to="/" className="text-sm text-slate-400 hover:text-slate-200">
-          ← ทุกสัปดาห์
+        <Link to={`/p/${pair}`} className="text-sm text-slate-400 hover:text-slate-200">
+          ← {pair} ทุกสัปดาห์
         </Link>
-        <span className="text-xs text-slate-500">บันทึกอัตโนมัติ</span>
+        {/* Same week, other pair */}
+        <div className="flex gap-1 rounded-lg border border-slate-800 p-0.5">
+          {PAIRS.map((p) => (
+            <Link
+              key={p}
+              to={`/p/${p}/week/${ws}${tail}`}
+              className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
+                p === pair ? 'bg-amber-500/20 text-amber-200' : 'text-slate-500 hover:text-slate-200'
+              }`}
+            >
+              {p}
+            </Link>
+          ))}
+        </div>
       </div>
 
       <div className="mb-4 flex items-center gap-3">
-        <Link to={`/week/${addDaysISO(ws, -7)}${day ? `/${day}` : ''}`} title="Previous week" className="rounded-md px-2 py-1 text-slate-400 hover:bg-slate-800">
+        <Link to={`/p/${pair}/week/${addDaysISO(ws, -7)}${tail}`} title="Previous week" className="rounded-md px-2 py-1 text-slate-400 hover:bg-slate-800">
           ‹
         </Link>
-        <h1 className="text-xl font-bold text-white">{weekLabel(ws)}</h1>
-        <Link to={`/week/${addDaysISO(ws, 7)}${day ? `/${day}` : ''}`} title="Next week" className="rounded-md px-2 py-1 text-slate-400 hover:bg-slate-800">
+        <h1 className="text-xl font-bold text-white">
+          <span className="mr-2 text-amber-300">{pair}</span>
+          {weekLabel(ws)}
+        </h1>
+        <Link to={`/p/${pair}/week/${addDaysISO(ws, 7)}${tail}`} title="Next week" className="rounded-md px-2 py-1 text-slate-400 hover:bg-slate-800">
           ›
         </Link>
+        <span className="ml-auto text-xs text-slate-500">บันทึกอัตโนมัติ</span>
       </div>
 
       {/* Sticky tab bar: Week + Mon–Fri */}
       <nav className="sticky top-0 z-10 -mx-4 mb-5 flex gap-1 overflow-x-auto border-b border-slate-800 bg-[#0b0f17]/95 px-4 py-2 backdrop-blur">
-        <button onClick={() => navigate(`/week/${ws}`)} className={tabCls(dow < 0)}>
+        <button onClick={() => navigate(base)} className={tabCls(dow < 0)}>
           Week
         </button>
         {DAY_NAMES.map((n, i) => {
@@ -273,14 +292,15 @@ export default function WeekPage() {
       </nav>
 
       {dow < 0 ? (
-        <WeekTab ws={ws} fields={week?.fields ?? {}} days={days} onOpen={open} />
+        <WeekTab pair={pair} ws={ws} fields={week?.fields ?? {}} days={days} onOpen={open} />
       ) : (
         <DayTab
-          key={`${ws}:${dow}`}
+          key={`${pair}:${ws}:${dow}`}
+          pair={pair}
           ws={ws}
           dow={dow}
           day={days.find((d) => d.dow === dow)}
-          onNext={dow < 4 ? () => open(dow + 1) : () => navigate(`/week/${ws}`)}
+          onNext={dow < 4 ? () => open(dow + 1) : () => navigate(base)}
           nextLabel={dow < 4 ? `${DAY_NAMES[dow + 1].short} →` : 'Week (สรุป) →'}
         />
       )}

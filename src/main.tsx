@@ -1,12 +1,19 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { RouterProvider, createHashRouter, Navigate } from 'react-router-dom'
+import { RouterProvider, createHashRouter, Navigate, useParams } from 'react-router-dom'
 import './index.css'
 import DateList from './components/DateList'
 import DayView from './components/DayView'
 import Home from './components/journal/Home'
+import PairHome from './components/journal/PairHome'
 import WeekPage from './components/journal/WeekPage'
+import { PAIRS } from './lib/template'
 import { startSync } from './lib/sync'
+
+function LegacyWeek() {
+  const { ws = '', '*': rest = '' } = useParams()
+  return <Navigate to={`/p/${PAIRS[0]}/week/${ws}${rest ? `/${rest}` : ''}`} replace />
+}
 
 // Kick off cloud sync (no-op unless Supabase env vars are configured).
 startSync()
@@ -14,8 +21,11 @@ startSync()
 // HashRouter keeps deep links working on GitHub Pages / static hosting.
 const router = createHashRouter([
   { path: '/', element: <Home /> },
-  { path: '/week/:ws', element: <WeekPage /> },
-  { path: '/week/:ws/:day', element: <WeekPage /> },
+  { path: '/p/:pair', element: <PairHome /> },
+  { path: '/p/:pair/week/:ws', element: <WeekPage /> },
+  { path: '/p/:pair/week/:ws/:day', element: <WeekPage /> },
+  // Links from before pairs existed go to the first pair's journal.
+  { path: '/week/:ws/*', element: <LegacyWeek /> },
   // The older plain-doc journal, kept so existing entries stay reachable.
   { path: '/old', element: <DateList /> },
   { path: '/day/:date', element: <DayView /> },

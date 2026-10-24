@@ -13,10 +13,8 @@ import {
   DAY_NAMES,
   DAY_SECTIONS,
   LEARNED,
-  MARKETS,
   MISTAKE_OPTIONS,
   NARRATIVE_OPTIONS,
-  normMarket,
 } from '../../lib/template'
 import type { Day, Trade, TradeResult } from '../../types'
 import { AutoText, Card, Pick, QuestionField, Shots, Toggles } from './ui'
@@ -27,13 +25,13 @@ const RESULTS: { value: TradeResult; label: string; cls: string }[] = [
   { value: 'be', label: 'BE', cls: 'border-slate-400 bg-slate-500/15 text-slate-200' },
 ]
 
-function TradeCard({ ws, dow, trade, n }: { ws: string; dow: number; trade: Trade; n: number }) {
-  const owner = dayOwner(ws, dow)
+function TradeCard({ pair, ws, dow, trade, n }: { pair: string; ws: string; dow: number; trade: Trade; n: number }) {
+  const owner = dayOwner(pair, ws, dow)
   const slot = `trade:${trade.id}`
   const [pnl, setPnl] = useState(trade.pnl)
   const pnlTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => setPnl(trade.pnl), [trade.pnl])
-  const save = (patch: Partial<Trade>) => updateTrade(ws, dow, trade.id, patch)
+  const save = (patch: Partial<Trade>) => updateTrade(pair, ws, dow, trade.id, patch)
   function changePnl(v: string) {
     setPnl(v)
     if (pnlTimer.current) clearTimeout(pnlTimer.current)
@@ -45,8 +43,6 @@ function TradeCard({ ws, dow, trade, n }: { ws: string; dow: number; trade: Trad
     <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className="mr-1 font-semibold text-white">Trade #{n}</span>
-        <Pick options={MARKETS} value={trade.pair ?? ''} onChange={(pair) => save({ pair })} />
-        <span className="mx-1 h-5 w-px bg-slate-700" />
         {RESULTS.map((r) => (
           <button
             key={r.value}
@@ -68,7 +64,7 @@ function TradeCard({ ws, dow, trade, n }: { ws: string; dow: number; trade: Trad
           }`}
         />
         <button
-          onClick={() => window.confirm(`ลบ Trade #${n} และรูปของไม้นี้?`) && deleteTrade(ws, dow, trade.id)}
+          onClick={() => window.confirm(`ลบ Trade #${n} และรูปของไม้นี้?`) && deleteTrade(pair, ws, dow, trade.id)}
           className="ml-auto text-xs text-slate-500 hover:text-red-400"
         >
           ลบ
@@ -100,19 +96,21 @@ function TradeCard({ ws, dow, trade, n }: { ws: string; dow: number; trade: Trad
 }
 
 export default function DayTab({
+  pair,
   ws,
   dow,
   day,
   onNext,
   nextLabel,
 }: {
+  pair: string
   ws: string
   dow: number
   day?: Day
   onNext: () => void
   nextLabel: string
 }) {
-  const owner = dayOwner(ws, dow)
+  const owner = dayOwner(pair, ws, dow)
   const fields = day?.fields ?? {}
   const trades = day?.trades ?? []
   const total = trades.reduce((s, t) => s + parsePnl(t.pnl), 0)
@@ -122,7 +120,7 @@ export default function DayTab({
       label={label}
       options={options}
       value={fields[key] ?? ''}
-      onSave={(v) => setDayField(ws, dow, key, v)}
+      onSave={(v) => setDayField(pair, ws, dow, key, v)}
       owner={owner}
       slot={key}
     />
@@ -130,20 +128,12 @@ export default function DayTab({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-white">
-          {DAY_NAMES[dow].th} ({DAY_NAMES[dow].short}) · {shortDate(addDaysISO(ws, dow))}
-        </h2>
-        <div className="flex items-center gap-2 text-sm text-slate-400">
-          ตลาด
-          <Toggles
-            tone="sky"
-            options={MARKETS}
-            value={(day?.markets ?? []).map(normMarket)}
-            onChange={(markets) => patchDay(ws, dow, { markets })}
-          />
-        </div>
-      </div>
+      <h2 className="text-lg font-semibold text-white">
+        Template รายวัน ({DAY_NAMES[dow].short}) <span className="text-amber-300">{pair}</span>
+        <span className="ml-2 text-base font-normal text-slate-400">
+          {DAY_NAMES[dow].th} · {shortDate(addDaysISO(ws, dow))}
+        </span>
+      </h2>
 
       {DAY_SECTIONS.map((sec) => (
         <Card key={sec.title} title={sec.title}>
@@ -153,10 +143,10 @@ export default function DayTab({
 
       <Card title={`Trades${trades.length ? ` · ${trades.length} ไม้ · ${formatMoney(total)}` : ''}`}>
         {trades.map((t, i) => (
-          <TradeCard key={t.id} ws={ws} dow={dow} trade={t} n={i + 1} />
+          <TradeCard key={t.id} pair={pair} ws={ws} dow={dow} trade={t} n={i + 1} />
         ))}
         <button
-          onClick={() => addTrade(ws, dow)}
+          onClick={() => addTrade(pair, ws, dow)}
           className="w-full rounded-lg border border-dashed border-slate-700 px-4 py-2.5 text-sm font-medium text-slate-400 hover:border-slate-500 hover:text-slate-200"
         >
           + เพิ่ม Trade
@@ -171,7 +161,7 @@ export default function DayTab({
             tone="amber"
             options={NARRATIVE_OPTIONS}
             value={day?.narrative ?? ''}
-            onChange={(narrative) => patchDay(ws, dow, { narrative })}
+            onChange={(narrative) => patchDay(pair, ws, dow, { narrative })}
           />
         </div>
         <div>
@@ -179,7 +169,7 @@ export default function DayTab({
           <Toggles
             options={MISTAKE_OPTIONS}
             value={day?.mistakes ?? []}
-            onChange={(mistakes) => patchDay(ws, dow, { mistakes })}
+            onChange={(mistakes) => patchDay(pair, ws, dow, { mistakes })}
           />
         </div>
         {field(LEARNED.key, LEARNED.label)}

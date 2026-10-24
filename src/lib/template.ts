@@ -95,10 +95,11 @@ export const DAY_NAMES = [
   { short: 'Fri', th: 'ศุกร์' },
 ]
 
-export const MARKETS = ['XAUUSD', 'NQ']
+/** One journal per pair. The first is where older, pair-less entries went. */
+export const PAIRS = ['XAUUSD', 'NQ']
 
-/** Early entries saved gold as "XAU"; show and count it as XAUUSD. */
-export function normMarket(m: string): string {
+/** Early entries saved gold as "XAU". */
+export function normPair(m: string): string {
   return m === 'XAU' ? 'XAUUSD' : m
 }
 

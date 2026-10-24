@@ -1,4 +1,5 @@
-import Dexie, { type Table } from 'dexie'
+import Dexie, { type Table, type Transaction } from 'dexie'
+import { PAIRS, normPair } from './template'
 import type { Block, BlockType, Day, DayEntry, Shot, Week } from '../types'
 import { emptyDay } from '../types'
 import { CHECKLIST_ITEMS } from './checklist'
@@ -24,8 +25,8 @@ class TradeJournalDB extends Dexie {
   entries!: Table<DayEntry, string>
   blocks!: Table<Block, string>
   outbox!: Table<Outbox, number>
-  weeks!: Table<Week, string>
-  days!: Table<Day, string>
+  pweeks!: Table<Week, string>
+  pdays!: Table<Day, string>
   shots!: Table<Shot, string>
   // legacy store, kept only so migration can read old image rows
   images!: Table<Record<string, unknown>, string>
@@ -61,7 +62,78 @@ class TradeJournalDB extends Dexie {
       days: 'id, weekStart',
       shots: 'id, owner, [owner+slot]',
     })
+    // v5: one journal per pair. Weeks/days move to pair-keyed tables; the v4
+    // tables are left in place (unused) so nothing is lost if this goes wrong.
+    this.version(5)
+      .stores({
+        entries: 'date, updatedAt',
+        images: 'id, entryDate, [entryDate+section]',
+        blocks: 'id, entryDate, [entryDate+order]',
+        outbox: '++seq, type',
+        weeks: 'weekStart',
+        days: 'id, weekStart',
+        shots: 'id, owner, [owner+slot]',
+        pweeks: 'id, pair',
+        pdays: 'id, [pair+weekStart], pair',
+      })
+      .upgrade(migrateToPairs)
   }
+}
+
+/**
+ * v4 -> v5: give every week/day a pair. A day goes to the pair its trades
+ * (or ticked markets) name when there is exactly one, else to PAIRS[0]; a
+ * week's prep goes with its days when they agree, else to PAIRS[0].
+ */
+async function migrateToPairs(tx: Transaction): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  type Row = Record<string, any>
+  const oldWeeks: Row[] = await tx.table('weeks').toArray()
+  const oldDays: Row[] = await tx.table('days').toArray()
+  const one = (xs: string[]) => {
+    const set = [...new Set(xs.filter(Boolean).map(normPair))]
+    return set.length === 1 ? set[0] : ''
+  }
+  const dayPair = new Map<string, string>()
+  for (const d of oldDays) {
+    const pair =
+      one((d.trades ?? []).map((t: Row) => t.pair ?? '')) || one(d.markets ?? []) || PAIRS[0]
+    dayPair.set(`${d.weekStart}:${d.dow}`, pair)
+    const { markets: _m, ...rest } = d
+    await tx.table('pdays').put({
+      ...rest,
+      id: `${pair}|${d.weekStart}|${d.dow}`,
+      pair,
+      trades: (d.trades ?? []).map(({ pair: _p, ...t }: Row) => t),
+    })
+  }
+  const now = Date.now()
+  const weekPair = new Map<string, string>()
+  const starts = new Set([...oldWeeks.map((w) => w.weekStart), ...oldDays.map((d) => d.weekStart)])
+  for (const ws of starts) {
+    const pairs = new Set(oldDays.filter((d) => d.weekStart === ws).map((d) => dayPair.get(`${ws}:${d.dow}`)!))
+    const prepPair = pairs.size === 1 ? [...pairs][0] : PAIRS[0]
+    weekPair.set(ws, prepPair)
+    const old = oldWeeks.find((w) => w.weekStart === ws)
+    for (const pair of new Set([...pairs, prepPair])) {
+      await tx.table('pweeks').put({
+        id: `${pair}|${ws}`,
+        pair,
+        weekStart: ws,
+        fields: pair === prepPair ? (old?.fields ?? {}) : {},
+        createdAt: old?.createdAt ?? now,
+        updatedAt: old?.updatedAt ?? now,
+      })
+    }
+  }
+  await tx
+    .table('shots')
+    .toCollection()
+    .modify((s: Row) => {
+      const [kind, ws, dow] = String(s.owner).split(':')
+      if (kind === 'week') s.owner = `week:${weekPair.get(ws) ?? PAIRS[0]}:${ws}`
+      else if (kind === 'day') s.owner = `day:${dayPair.get(`${ws}:${dow}`) ?? PAIRS[0]}:${ws}:${dow}`
+    })
 }
 
 export const db = new TradeJournalDB()
