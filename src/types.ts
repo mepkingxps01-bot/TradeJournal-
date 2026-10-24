@@ -51,6 +51,8 @@ export type TradeResult = '' | 'win' | 'loss' | 'be'
 
 export interface Trade {
   id: string
+  /** One of MARKETS; missing on trades made before pairs existed. */
+  pair?: string
   reason: string
   setup: string
   result: TradeResult

@@ -5,7 +5,7 @@ import { db } from '../../lib/db'
 import { currentWeekStart, mondayOf, todayISO, weekLabel } from '../../lib/format'
 import { computeStats } from '../../lib/journal'
 import { DAY_NAMES } from '../../lib/template'
-import { StatsLine, verdictMark } from './WeekPage'
+import { PairStats, StatsLine, verdictMark } from './WeekPage'
 
 export default function Home() {
   const navigate = useNavigate()
@@ -64,6 +64,9 @@ export default function Home() {
         <section className="mb-6 rounded-xl border border-slate-800 bg-slate-900/30 p-4">
           <h2 className="mb-2 text-sm font-semibold text-slate-300">สถิติรวมทุกสัปดาห์</h2>
           <StatsLine s={all} />
+          <div className="mt-3">
+            <PairStats s={all} />
+          </div>
           {all.mistakes.length > 0 && (
             <div className="mt-3 space-y-1.5">
               {all.mistakes.map(([m, n]) => (

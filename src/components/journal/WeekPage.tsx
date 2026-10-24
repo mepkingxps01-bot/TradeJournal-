@@ -18,6 +18,7 @@ import {
   NARRATIVE_TIMING,
   WEEK_PREP,
   WEEK_REFLECTION,
+  normMarket,
 } from '../../lib/template'
 import type { Day } from '../../types'
 import DayTab from './DayTab'
@@ -68,6 +69,28 @@ export function StatsLine({ s, of }: { s: Stats; of?: number }) {
   )
 }
 
+/** One chip per traded pair: trades, win rate, P&L. */
+export function PairStats({ s }: { s: Stats }) {
+  if (!s.pairs.length) return null
+  return (
+    <div className="flex flex-wrap gap-2">
+      {s.pairs.map((p) => (
+        <span key={p.pair} className="rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-1.5 text-sm">
+          <b className="text-sky-200">{p.pair}</b>
+          <span className="text-slate-400">
+            {' '}
+            · {p.trades} ไม้
+            {p.wins + p.losses > 0 && ` · ชนะ ${Math.round((p.wins / (p.wins + p.losses)) * 100)}%`} ·{' '}
+          </span>
+          <b className={p.pnl > 0 ? 'text-emerald-400' : p.pnl < 0 ? 'text-rose-400' : 'text-white'}>
+            {formatMoney(p.pnl)}
+          </b>
+        </span>
+      ))}
+    </div>
+  )
+}
+
 function Scoreboard({ ws, days, onOpen }: { ws: string; days: Day[]; onOpen: (dow: number) => void }) {
   return (
     <div className="overflow-x-auto">
@@ -93,7 +116,7 @@ function Scoreboard({ ws, days, onOpen }: { ws: string; days: Day[]; onOpen: (do
                     {name.short} {shortDate(addDaysISO(ws, dow))}
                   </button>
                 </td>
-                <td className="py-2 pr-3 text-slate-300">{d?.markets.join(', ') || '–'}</td>
+                <td className="py-2 pr-3 text-slate-300">{d?.markets.map(normMarket).join(', ') || '–'}</td>
                 <td className="py-2 pr-3">
                   <select
                     value={d?.narrative ?? ''}
@@ -160,6 +183,7 @@ function WeekTab({ ws, fields, days, onOpen }: { ws: string; fields: Record<stri
 
       <Card title="Scoreboard">
         <StatsLine s={stats} />
+        <PairStats s={stats} />
         <Scoreboard ws={ws} days={days} onOpen={onOpen} />
         <p className="text-xs text-slate-500">
           เลือก Narrative ได้ที่นี่หรือท้ายหน้าแต่ละวัน · P&L รวมจาก Trades ของวันนั้น

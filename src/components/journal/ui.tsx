@@ -179,11 +179,15 @@ export function Toggles({
   options,
   value,
   onChange,
+  tone = 'rose',
 }: {
   options: string[]
   value: string[]
   onChange: (v: string[]) => void
+  tone?: 'rose' | 'sky'
 }) {
+  const onCls =
+    tone === 'sky' ? 'border-sky-500 bg-sky-500/15 text-sky-200' : 'border-rose-500 bg-rose-500/15 text-rose-200'
   return (
     <div className="flex flex-wrap gap-1.5">
       {options.map((o) => {
@@ -194,7 +198,7 @@ export function Toggles({
             onClick={() => onChange(on ? value.filter((x) => x !== o) : [...value, o])}
             className={`rounded-full border px-3 py-1 text-sm transition ${
               on
-                ? 'border-rose-500 bg-rose-500/15 text-rose-200'
+                ? onCls
                 : 'border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200'
             }`}
           >

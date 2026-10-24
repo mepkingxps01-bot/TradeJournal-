@@ -1,6 +1,6 @@
 import { db } from './db'
 import { parsePnl } from './format'
-import { NARRATIVE_RIGHT, NARRATIVE_TIMING } from './template'
+import { NARRATIVE_RIGHT, NARRATIVE_TIMING, normMarket } from './template'
 import type { Day, Shot, Trade } from '../types'
 
 function uid(): string {
@@ -90,15 +90,25 @@ async function editTrades(weekStart: string, dow: number, fn: (t: Trade[]) => Tr
   })
 }
 
-export function addTrade(weekStart: string, dow: number) {
+/** New trade; starts on the day's pair when exactly one is picked. */
+export async function addTrade(weekStart: string, dow: number) {
+  const day = await db.days.get(dayId(weekStart, dow))
+  const markets = (day?.markets ?? []).map(normMarket)
+  const pair = markets.length === 1 ? markets[0] : ''
   return editTrades(weekStart, dow, (t) => [
     ...t,
-    { id: uid(), reason: '', setup: '', result: '', pnl: '' },
+    { id: uid(), pair, reason: '', setup: '', result: '', pnl: '' },
   ])
 }
 
-export function updateTrade(weekStart: string, dow: number, id: string, patch: Partial<Trade>) {
-  return editTrades(weekStart, dow, (t) => t.map((x) => (x.id === id ? { ...x, ...patch } : x)))
+export async function updateTrade(weekStart: string, dow: number, id: string, patch: Partial<Trade>) {
+  await editTrades(weekStart, dow, (t) => t.map((x) => (x.id === id ? { ...x, ...patch } : x)))
+  // Trading a pair means the day covered it, so tick it in the day's markets too.
+  if (patch.pair) {
+    const day = await db.days.get(dayId(weekStart, dow))
+    const markets = (day?.markets ?? []).map(normMarket)
+    if (!markets.includes(patch.pair)) await patchDay(weekStart, dow, { markets: [...markets, patch.pair] })
+  }
 }
 
 export async function deleteTrade(weekStart: string, dow: number, id: string) {
@@ -158,11 +168,14 @@ export interface Stats {
   pnl: number
   /** Mistake → number of days it was ticked, most frequent first. */
   mistakes: [string, number][]
+  /** Per traded pair, most trades first; trades without a pair are left out. */
+  pairs: { pair: string; trades: number; wins: number; losses: number; pnl: number }[]
 }
 
 export function computeStats(days: Day[]): Stats {
-  const s: Stats = { graded: 0, right: 0, rightLate: 0, trades: 0, wins: 0, losses: 0, pnl: 0, mistakes: [] }
+  const s: Stats = { graded: 0, right: 0, rightLate: 0, trades: 0, wins: 0, losses: 0, pnl: 0, mistakes: [], pairs: [] }
   const counts = new Map<string, number>()
+  const pairs = new Map<string, Stats['pairs'][number]>()
   for (const d of days) {
     if (d.narrative) s.graded++
     if (d.narrative === NARRATIVE_RIGHT) s.right++
@@ -173,9 +186,18 @@ export function computeStats(days: Day[]): Stats {
       if (t.result === 'win') s.wins++
       if (t.result === 'loss') s.losses++
       s.pnl += parsePnl(t.pnl)
+      if (t.pair) {
+        const p = pairs.get(t.pair) ?? { pair: t.pair, trades: 0, wins: 0, losses: 0, pnl: 0 }
+        p.trades++
+        if (t.result === 'win') p.wins++
+        if (t.result === 'loss') p.losses++
+        p.pnl += parsePnl(t.pnl)
+        pairs.set(t.pair, p)
+      }
     }
   }
   s.mistakes = [...counts.entries()].sort((a, b) => b[1] - a[1])
+  s.pairs = [...pairs.values()].sort((a, b) => b.trades - a.trades)
   return s
 }
 

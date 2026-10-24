@@ -95,7 +95,12 @@ export const DAY_NAMES = [
   { short: 'Fri', th: 'ศุกร์' },
 ]
 
-export const MARKETS = ['NQ', 'XAU']
+export const MARKETS = ['XAUUSD', 'NQ']
+
+/** Early entries saved gold as "XAU"; show and count it as XAUUSD. */
+export function normMarket(m: string): string {
+  return m === 'XAU' ? 'XAUUSD' : m
+}
 
 export const NARRATIVE_RIGHT = 'ถูก'
 export const NARRATIVE_TIMING = 'ถูก แต่ Timing ผิด'

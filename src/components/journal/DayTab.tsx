@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { addDaysISO, formatMoney, parsePnl, shortDate } from '../../lib/format'
 import {
   addShots,
@@ -16,6 +16,7 @@ import {
   MARKETS,
   MISTAKE_OPTIONS,
   NARRATIVE_OPTIONS,
+  normMarket,
 } from '../../lib/template'
 import type { Day, Trade, TradeResult } from '../../types'
 import { AutoText, Card, Pick, QuestionField, Shots, Toggles } from './ui'
@@ -30,14 +31,22 @@ function TradeCard({ ws, dow, trade, n }: { ws: string; dow: number; trade: Trad
   const owner = dayOwner(ws, dow)
   const slot = `trade:${trade.id}`
   const [pnl, setPnl] = useState(trade.pnl)
+  const pnlTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => setPnl(trade.pnl), [trade.pnl])
   const save = (patch: Partial<Trade>) => updateTrade(ws, dow, trade.id, patch)
+  function changePnl(v: string) {
+    setPnl(v)
+    if (pnlTimer.current) clearTimeout(pnlTimer.current)
+    pnlTimer.current = setTimeout(() => save({ pnl: v }), 400)
+  }
   const value = parsePnl(pnl)
 
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className="mr-1 font-semibold text-white">Trade #{n}</span>
+        <Pick options={MARKETS} value={trade.pair ?? ''} onChange={(pair) => save({ pair })} />
+        <span className="mx-1 h-5 w-px bg-slate-700" />
         {RESULTS.map((r) => (
           <button
             key={r.value}
@@ -51,8 +60,7 @@ function TradeCard({ ws, dow, trade, n }: { ws: string; dow: number; trade: Trad
         ))}
         <input
           value={pnl}
-          onChange={(e) => setPnl(e.target.value)}
-          onBlur={() => pnl !== trade.pnl && save({ pnl })}
+          onChange={(e) => changePnl(e.target.value)}
           placeholder="P&L เช่น +120"
           inputMode="decimal"
           className={`w-32 rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-sky-500 ${
@@ -129,8 +137,9 @@ export default function DayTab({
         <div className="flex items-center gap-2 text-sm text-slate-400">
           ตลาด
           <Toggles
+            tone="sky"
             options={MARKETS}
-            value={day?.markets ?? []}
+            value={(day?.markets ?? []).map(normMarket)}
             onChange={(markets) => patchDay(ws, dow, { markets })}
           />
         </div>
