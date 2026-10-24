@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie'
-import type { Block, BlockType, DayEntry } from '../types'
+import type { Block, BlockType, Day, DayEntry, Shot, Week } from '../types'
 import { emptyDay } from '../types'
 import { CHECKLIST_ITEMS } from './checklist'
 import { emitLocalChange } from './syncBus'
@@ -24,6 +24,9 @@ class TradeJournalDB extends Dexie {
   entries!: Table<DayEntry, string>
   blocks!: Table<Block, string>
   outbox!: Table<Outbox, number>
+  weeks!: Table<Week, string>
+  days!: Table<Day, string>
+  shots!: Table<Shot, string>
   // legacy store, kept only so migration can read old image rows
   images!: Table<Record<string, unknown>, string>
 
@@ -46,6 +49,17 @@ class TradeJournalDB extends Dexie {
       images: 'id, entryDate, [entryDate+section]',
       blocks: 'id, entryDate, [entryDate+order]',
       outbox: '++seq, type',
+    })
+    // v4: the Narrative Training journal (weeks / days / shots). The plain-doc
+    // tables above are kept as-is so old entries stay readable under /old.
+    this.version(4).stores({
+      entries: 'date, updatedAt',
+      images: 'id, entryDate, [entryDate+section]',
+      blocks: 'id, entryDate, [entryDate+order]',
+      outbox: '++seq, type',
+      weeks: 'weekStart',
+      days: 'id, weekStart',
+      shots: 'id, owner, [owner+slot]',
     })
   }
 }

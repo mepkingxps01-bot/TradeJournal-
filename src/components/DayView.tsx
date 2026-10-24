@@ -7,6 +7,7 @@ import {
   addImageBlocks,
   addTextBlock,
   updateBlockText,
+  updateBlockCaption,
   deleteBlock,
   moveBlock,
   setDayTitle,
@@ -199,7 +200,7 @@ export default function DayView() {
     )
       return
     await deleteDay(date)
-    navigate('/')
+    navigate('/old')
   }
 
   if (!ready) {
@@ -214,7 +215,7 @@ export default function DayView() {
     <div className="mx-auto max-w-5xl px-4 py-6">
       {/* Header */}
       <div className="mb-4 flex items-center justify-between gap-3">
-        <Link to="/" className="text-sm text-slate-400 hover:text-slate-200">
+        <Link to="/old" className="text-sm text-slate-400 hover:text-slate-200">
           ← All dates
         </Link>
         <span className="text-xs text-slate-500">Saved automatically</span>
@@ -289,6 +290,7 @@ export default function DayView() {
           index={lightboxIndex}
           onIndexChange={setLightboxIndex}
           onClose={() => setLightboxIndex(null)}
+          onCaption={updateBlockCaption}
         />
       )}
     </div>

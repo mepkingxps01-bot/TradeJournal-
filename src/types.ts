@@ -33,6 +33,59 @@ export interface DayEntry {
   migrated?: boolean
 }
 
+// ---------------------------------------------------------------------------
+// Narrative Training journal: one week = Weekend Prep + Mon–Fri day pages +
+// Weekly Reflection. Text answers live in `fields` keyed by the question key
+// in lib/template.ts; pasted charts live in the `shots` table.
+// ---------------------------------------------------------------------------
+
+export interface Week {
+  /** YYYY-MM-DD of the week's Monday — primary key. */
+  weekStart: string
+  fields: Record<string, string>
+  createdAt: number
+  updatedAt: number
+}
+
+export type TradeResult = '' | 'win' | 'loss' | 'be'
+
+export interface Trade {
+  id: string
+  reason: string
+  setup: string
+  result: TradeResult
+  /** Free text like "+120" or "-45.5"; parsed with parsePnl for totals. */
+  pnl: string
+}
+
+export interface Day {
+  /** `${weekStart}:${dow}` — dow 0 = Mon … 4 = Fri. */
+  id: string
+  weekStart: string
+  dow: number
+  markets: string[]
+  /** '' until picked; otherwise one of NARRATIVE_OPTIONS. */
+  narrative: string
+  mistakes: string[]
+  fields: Record<string, string>
+  trades: Trade[]
+  createdAt: number
+  updatedAt: number
+}
+
+/** A pasted chart, attached to one question (`slot`) on a week or day page. */
+export interface Shot {
+  id: string
+  /** `week:<weekStart>` or `day:<weekStart>:<dow>`. */
+  owner: string
+  /** Question key, or `trade:<tradeId>`. */
+  slot: string
+  order: number
+  blob: Blob
+  caption: string
+  createdAt: number
+}
+
 export function emptyDay(date: string): DayEntry {
   const now = Date.now()
   return { date, title: '', createdAt: now, updatedAt: now, migrated: true }

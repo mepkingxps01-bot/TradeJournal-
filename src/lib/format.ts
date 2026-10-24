@@ -29,8 +29,50 @@ export function formatDate(iso: string): string {
   return `${WEEKDAYS[dt.getDay()]}, ${d} ${MONTHS[m - 1]} ${y}`
 }
 
-export function todayISO(): string {
-  const d = new Date()
+function toISO(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+function fromISO(iso: string): Date {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+export function todayISO(): string {
+  return toISO(new Date())
+}
+
+export function addDaysISO(iso: string, n: number): string {
+  const d = fromISO(iso)
+  d.setDate(d.getDate() + n)
+  return toISO(d)
+}
+
+/** The Monday of the week containing `iso` (Sat/Sun belong to the week before, as prep days). */
+export function mondayOf(iso: string): string {
+  const day = fromISO(iso).getDay() // 0 = Sun
+  return addDaysISO(iso, day === 0 ? -6 : 1 - day)
+}
+
+/** Week you'd be journaling today: on Sat/Sun that's next week's prep. */
+export function currentWeekStart(): string {
+  const today = todayISO()
+  const day = fromISO(today).getDay()
+  return day === 0 || day === 6 ? addDaysISO(mondayOf(today), 7) : mondayOf(today)
+}
+
+/** "2026-10-19" -> "19–23 Oct 2026" (Mon–Fri). */
+export function weekLabel(weekStart: string): string {
+  const a = fromISO(weekStart)
+  const b = fromISO(addDaysISO(weekStart, 4))
+  const left =
+    a.getMonth() === b.getMonth() ? `${a.getDate()}` : `${a.getDate()} ${MONTHS[a.getMonth()]}`
+  return `${left}–${b.getDate()} ${MONTHS[b.getMonth()]} ${b.getFullYear()}`
+}
+
+/** "2026-10-19" -> "19 Oct". */
+export function shortDate(iso: string): string {
+  const d = fromISO(iso)
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`
 }

@@ -1,15 +1,20 @@
 import { useEffect, useState } from 'react'
-import { updateBlockCaption } from '../lib/db'
-import type { Block } from '../types'
+
+export interface LightboxImage {
+  id: string
+  blob?: Blob
+  caption?: string
+}
 
 interface Props {
-  images: Block[]
+  images: LightboxImage[]
   index: number
   onIndexChange: (i: number) => void
   onClose: () => void
+  onCaption: (id: string, caption: string) => void
 }
 
-export default function Lightbox({ images, index, onIndexChange, onClose }: Props) {
+export default function Lightbox({ images, index, onIndexChange, onClose, onCaption }: Props) {
   const image = images[index]
   const [url, setUrl] = useState('')
   const [caption, setCaption] = useState(image?.caption ?? '')
@@ -91,7 +96,7 @@ export default function Lightbox({ images, index, onIndexChange, onClose }: Prop
         <input
           value={caption}
           onChange={(e) => setCaption(e.target.value)}
-          onBlur={() => updateBlockCaption(image.id, caption)}
+          onBlur={() => onCaption(image.id, caption)}
           placeholder="Add a caption / timeframe (e.g. H4, Weekly)…"
           className="mx-auto block w-full max-w-2xl rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-sky-500"
         />

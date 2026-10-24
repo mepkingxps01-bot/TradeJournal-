@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../lib/db'
 import { formatDate, todayISO } from '../lib/format'
@@ -42,8 +42,11 @@ export default function DateList() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
       <header className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight text-white">
-          📈 Trade Journal
+        <Link to="/" className="text-sm text-slate-400 hover:text-slate-200">
+          ← Narrative Training Journal
+        </Link>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight text-white">
+          📈 Trade Journal (old)
         </h1>
         <p className="mt-1 text-sm text-slate-400">
           Pick a date, then paste your charts and type your notes.
