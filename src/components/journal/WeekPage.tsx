@@ -241,24 +241,10 @@ export default function WeekPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6">
-      <div className="mb-3 flex items-center justify-between gap-3">
+      <div className="mb-3">
         <Link to={`/p/${pair}`} className="text-sm text-slate-400 hover:text-slate-200">
           ← {pair} ทุกสัปดาห์
         </Link>
-        {/* Same week, other pair */}
-        <div className="flex gap-1 rounded-lg border border-slate-800 p-0.5">
-          {PAIRS.map((p) => (
-            <Link
-              key={p}
-              to={`/p/${p}/week/${ws}${tail}`}
-              className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
-                p === pair ? 'bg-amber-500/20 text-amber-200' : 'text-slate-500 hover:text-slate-200'
-              }`}
-            >
-              {p}
-            </Link>
-          ))}
-        </div>
       </div>
 
       <div className="mb-4 flex items-center gap-3">
@@ -275,21 +261,39 @@ export default function WeekPage() {
         <span className="ml-auto text-xs text-slate-500">บันทึกอัตโนมัติ</span>
       </div>
 
-      {/* Sticky tab bar: Week + Mon–Fri */}
-      <nav className="sticky top-0 z-10 -mx-4 mb-5 flex gap-1 overflow-x-auto border-b border-slate-800 bg-[#0b0f17]/95 px-4 py-2 backdrop-blur">
-        <button onClick={() => navigate(base)} className={tabCls(dow < 0)}>
-          Week
-        </button>
-        {DAY_NAMES.map((n, i) => {
-          const v = verdictMark(days.find((d) => d.dow === i)?.narrative ?? '')
-          return (
-            <button key={n.short} onClick={() => open(i)} className={tabCls(dow === i)}>
-              {n.short} <span className="text-xs opacity-70">{shortDate(addDaysISO(ws, i)).split(' ')[0]}</span>{' '}
-              <span className={dow === i ? '' : v.cls}>{v.mark}</span>
-            </button>
-          )
-        })}
-      </nav>
+      {/* Sticky header: which pair (switch to the same week of another) + Week/Mon–Fri tabs */}
+      <div className="sticky top-0 z-10 -mx-4 mb-5 border-b border-slate-800 bg-[#0b0f17]/95 px-4 py-2 backdrop-blur">
+        <div className="mb-2 flex items-center gap-2">
+          <div className="flex gap-1 rounded-lg border border-slate-700 p-0.5">
+            {PAIRS.map((p) => (
+              <Link
+                key={p}
+                to={`/p/${p}/week/${ws}${tail}`}
+                className={`rounded-md px-3 py-1 text-sm font-bold ${
+                  p === pair ? 'bg-amber-400 text-slate-950' : 'text-slate-500 hover:text-slate-200'
+                }`}
+              >
+                {p}
+              </Link>
+            ))}
+          </div>
+          <span className="truncate text-xs text-slate-500">{weekLabel(ws)}</span>
+        </div>
+        <nav className="flex gap-1 overflow-x-auto">
+          <button onClick={() => navigate(base)} className={tabCls(dow < 0)}>
+            Week
+          </button>
+          {DAY_NAMES.map((n, i) => {
+            const v = verdictMark(days.find((d) => d.dow === i)?.narrative ?? '')
+            return (
+              <button key={n.short} onClick={() => open(i)} className={tabCls(dow === i)}>
+                {n.short} <span className="text-xs opacity-70">{shortDate(addDaysISO(ws, i)).split(' ')[0]}</span>{' '}
+                <span className={dow === i ? '' : v.cls}>{v.mark}</span>
+              </button>
+            )
+          })}
+        </nav>
+      </div>
 
       {dow < 0 ? (
         <WeekTab pair={pair} ws={ws} fields={week?.fields ?? {}} days={days} onOpen={open} />
