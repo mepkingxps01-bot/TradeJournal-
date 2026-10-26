@@ -4,6 +4,7 @@ import { db } from '../../lib/db'
 import { currentWeekStart, formatMoney, weekLabel } from '../../lib/format'
 import { computeStats } from '../../lib/journal'
 import { PAIRS } from '../../lib/template'
+import Calendar from './Calendar'
 
 /** Start page: one card per pair's journal. */
 export default function Home() {
@@ -72,6 +73,9 @@ export default function Home() {
           )
         })}
       </div>
+
+      <h2 className="mt-8 mb-2 text-lg font-semibold text-white">📅 ปฏิทินรวมทุกคู่</h2>
+      <Calendar />
 
       <footer className="mt-10 space-y-2 text-center text-xs text-slate-600">
         <p>ข้อมูลเก็บในเบราว์เซอร์นี้ (IndexedDB) · ใช้ได้แม้ออฟไลน์</p>
