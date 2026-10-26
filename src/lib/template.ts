@@ -96,7 +96,7 @@ export const DAY_NAMES = [
 ]
 
 /** One journal per pair. The first is where older, pair-less entries went. */
-export const PAIRS = ['XAUUSD', 'NQ']
+export const PAIRS = ['XAUUSD', 'NQ', 'EURUSD']
 
 /** Early entries saved gold as "XAU". */
 export function normPair(m: string): string {

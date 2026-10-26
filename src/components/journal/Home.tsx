@@ -16,13 +16,13 @@ export default function Home() {
   if (!data) return null
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
+    <div className="mx-auto max-w-5xl px-4 py-8">
       <header className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight text-white">📈 Narrative Training Journal</h1>
         <p className="mt-1 text-sm text-slate-400">แยก Template ตามคู่เงิน เลือกคู่ที่จะเขียน</p>
       </header>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {PAIRS.map((pair) => {
           const s = computeStats(data.days.filter((d) => d.pair === pair))
           const weeks = data.weeks.filter((w) => w.pair === pair).length
