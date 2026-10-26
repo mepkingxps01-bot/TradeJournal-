@@ -112,11 +112,15 @@ function Thumb({ shot, onOpen }: { shot: Shot; onOpen: () => void }) {
       >
         ✕
       </button>
-      {shot.caption && (
-        <figcaption className="border-t border-slate-800 px-3 py-1.5 text-xs text-slate-300">
-          {shot.caption}
-        </figcaption>
-      )}
+      {/* Note under the chart; pasting another image here adds it below. */}
+      <figcaption className="border-t border-slate-800 p-1.5">
+        <AutoText
+          value={shot.caption}
+          onSave={(v) => setShotCaption(shot.id, v)}
+          onImages={(blobs) => addShots(shot.owner, shot.slot, blobs)}
+          placeholder="พิมพ์โน้ตใต้รูปนี้…"
+        />
+      </figcaption>
     </figure>
   )
 }
