@@ -30,6 +30,9 @@ export interface SyncStatus {
   error: string | null
 }
 
+/** No login: the journal has a single owner, so all rows use this id. */
+export const OWNER_ID = 'me'
+
 let status: SyncStatus = {
   configured: isSupabaseConfigured,
   email: null,
@@ -608,24 +611,10 @@ export function startSync(): void {
   if (!supabase || started) return
   started = true
 
-  const onSignedIn = (userId: string, email: string | null) => {
-    setStatus({ userId, email })
-    void fullSync()
-    subscribeRealtime(userId)
-  }
-  const onSignedOut = () => {
-    setStatus({ userId: null, email: null, state: 'idle', lastSyncedAt: null })
-    unsubscribeRealtime()
-  }
-
-  supabase.auth.getUser().then(({ data }) => {
-    if (data.user) onSignedIn(data.user.id, data.user.email ?? null)
-  })
-
-  supabase.auth.onAuthStateChange((_event, session) => {
-    if (session?.user) onSignedIn(session.user.id, session.user.email ?? null)
-    else onSignedOut()
-  })
+  // Single-user, no login: every row belongs to one fixed owner id.
+  setStatus({ userId: OWNER_ID, email: null })
+  void fullSync()
+  subscribeRealtime(OWNER_ID)
 
   onLocalChange(() => scheduleSync())
   window.addEventListener('online', () => void fullSync())
@@ -671,12 +660,6 @@ function subscribeRealtime(userId: string) {
     .subscribe()
 }
 
-function unsubscribeRealtime() {
-  if (supabase && realtimeChannel) {
-    void supabase.removeChannel(realtimeChannel)
-    realtimeChannel = null
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Auth helpers used by the sign-in UI (email one-time code)
