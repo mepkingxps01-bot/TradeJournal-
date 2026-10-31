@@ -13,10 +13,10 @@ import { emitLocalChange } from './syncBus'
  */
 export interface Outbox {
   seq?: number
-  type: 'delete-entry' | 'delete-block'
-  /** entry date (both kinds carry it). */
+  type: 'delete-entry' | 'delete-block' | 'delete-pweek' | 'delete-pday' | 'delete-shot'
+  /** entry date for the old journal; '' for the pair journal. */
   date: string
-  /** block id, for delete-block only. */
+  /** row id (block / pweek / pday / shot); not used by delete-entry. */
   id?: string
   at: number
 }

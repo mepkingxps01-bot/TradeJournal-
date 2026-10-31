@@ -1,7 +1,7 @@
 import { db } from './db'
 import { onLocalChange } from './syncBus'
 import { supabase, isSupabaseConfigured, IMAGE_BUCKET } from './supabase'
-import type { Block, DayEntry } from '../types'
+import type { Block, Day, DayEntry, Shot, Week } from '../types'
 
 /**
  * Cloud sync engine.
@@ -100,6 +100,166 @@ function storagePath(userId: string, blockId: string): string {
   return `${userId}/${blockId}`
 }
 
+
+// ---------------------------------------------------------------------------
+// Pair journal (Narrative Training: weeks / days / chart shots)
+// ---------------------------------------------------------------------------
+
+interface DocRow<T> {
+  user_id: string
+  id: string
+  data: T | null
+  updated_at: number
+  deleted: boolean
+}
+
+interface ShotRow {
+  user_id: string
+  id: string
+  owner: string
+  slot: string
+  order: number
+  caption: string | null
+  created_at: number
+  updated_at: number
+  storage_path: string | null
+  deleted: boolean
+}
+
+function shotPath(userId: string, shotId: string): string {
+  return `${userId}/shots/${shotId}`
+}
+
+const shotStamp = (s: Shot) => s.updatedAt ?? s.createdAt
+
+/** Pull pweeks or pdays (whole record stored as jsonb). */
+async function pullDocs(kind: 'pweeks' | 'pdays'): Promise<void> {
+  if (!supabase) return
+  const table = kind === 'pweeks' ? db.pweeks : db.pdays
+  const since = getCursor(`pull_${kind}`)
+  const { data, error } = await supabase
+    .from(kind)
+    .select('*')
+    .gt('updated_at', since)
+    .order('updated_at', { ascending: true })
+  if (error) throw error
+  let max = since
+  for (const row of (data ?? []) as DocRow<Week & Day>[]) {
+    max = Math.max(max, row.updated_at)
+    if (row.deleted) {
+      await table.delete(row.id)
+      continue
+    }
+    const local = await table.get(row.id)
+    if (row.data && (!local || row.updated_at > local.updatedAt)) {
+      await table.put({ ...row.data, id: row.id, updatedAt: row.updated_at })
+    }
+  }
+  setCursor(`pull_${kind}`, max)
+  if (max > getCursor(`push_${kind}`)) setCursor(`push_${kind}`, max)
+}
+
+async function pullShots(): Promise<void> {
+  if (!supabase) return
+  const since = getCursor('pull_shots')
+  const { data, error } = await supabase
+    .from('shots')
+    .select('*')
+    .gt('updated_at', since)
+    .order('updated_at', { ascending: true })
+  if (error) throw error
+  let max = since
+  for (const row of (data ?? []) as ShotRow[]) {
+    if (row.deleted) {
+      await db.shots.delete(row.id)
+      max = Math.max(max, row.updated_at)
+      continue
+    }
+    const local = await db.shots.get(row.id)
+    if (local && row.updated_at <= shotStamp(local)) {
+      max = Math.max(max, row.updated_at)
+      continue
+    }
+    let blob = local?.blob
+    if (!blob && row.storage_path) {
+      const dl = await supabase.storage.from(IMAGE_BUCKET).download(row.storage_path)
+      // Image not downloadable yet: stop here so this row is retried next sync.
+      if (dl.error || !dl.data) break
+      blob = dl.data
+    }
+    if (!blob) {
+      max = Math.max(max, row.updated_at)
+      continue
+    }
+    await db.shots.put({
+      id: row.id,
+      owner: row.owner,
+      slot: row.slot,
+      order: row.order ?? 0,
+      blob,
+      caption: row.caption ?? '',
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    })
+    max = Math.max(max, row.updated_at)
+  }
+  setCursor('pull_shots', max)
+  if (max > getCursor('push_shots')) setCursor('push_shots', max)
+}
+
+async function pushDocs(userId: string, kind: 'pweeks' | 'pdays'): Promise<void> {
+  if (!supabase) return
+  const table = kind === 'pweeks' ? db.pweeks : db.pdays
+  const since = getCursor(`push_${kind}`)
+  const all: (Week | Day)[] = await table.toArray()
+  const dirty = all.filter((r) => r.updatedAt > since)
+  if (!dirty.length) return
+  const rows = dirty.map((r) => ({
+    user_id: userId,
+    id: r.id,
+    data: r,
+    updated_at: r.updatedAt,
+    deleted: false,
+  }))
+  for (let i = 0; i < rows.length; i += 200) {
+    const { error } = await supabase.from(kind).upsert(rows.slice(i, i + 200))
+    if (error) throw error
+  }
+  setCursor(`push_${kind}`, Math.max(since, ...dirty.map((r) => r.updatedAt)))
+}
+
+async function pushShots(userId: string): Promise<void> {
+  if (!supabase) return
+  const since = getCursor('push_shots')
+  const all = await db.shots.toArray()
+  const dirty = all.filter((s) => shotStamp(s) > since).sort((a, b) => shotStamp(a) - shotStamp(b))
+  for (const s of dirty) {
+    const path = shotPath(userId, s.id)
+    const up = await supabase.storage
+      .from(IMAGE_BUCKET)
+      .upload(path, s.blob, { upsert: false, contentType: s.blob.type || 'image/png' })
+    if (up.error) {
+      const msg = up.error.message?.toLowerCase() ?? ''
+      if (!msg.includes('exist') && !msg.includes('duplicate')) throw up.error
+    }
+    const { error } = await supabase.from('shots').upsert({
+      user_id: userId,
+      id: s.id,
+      owner: s.owner,
+      slot: s.slot,
+      order: s.order ?? 0,
+      caption: s.caption ?? '',
+      created_at: s.createdAt,
+      updated_at: shotStamp(s),
+      storage_path: path,
+      deleted: false,
+    })
+    if (error) throw error
+    // Advance per shot so a failure mid-way doesn't re-upload finished ones.
+    setCursor('push_shots', Math.max(getCursor('push_shots'), shotStamp(s)))
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Pull: cloud -> local
 // ---------------------------------------------------------------------------
@@ -175,6 +335,11 @@ async function pull(): Promise<void> {
     setCursor('pullBlocks', max)
     if (max > getCursor('pushBlocks')) setCursor('pushBlocks', max)
   }
+
+  // --- pair journal ---
+  await pullDocs('pweeks')
+  await pullDocs('pdays')
+  await pullShots()
 }
 
 // ---------------------------------------------------------------------------
@@ -196,6 +361,30 @@ async function push(userId: string): Promise<void> {
         deleted: true,
       })
       if (error) throw error
+    } else if (row.type === 'delete-pweek' || row.type === 'delete-pday') {
+      const { error } = await supabase.from(row.type === 'delete-pweek' ? 'pweeks' : 'pdays').upsert({
+        user_id: userId,
+        id: row.id!,
+        data: null,
+        updated_at: Date.now(),
+        deleted: true,
+      })
+      if (error) throw error
+    } else if (row.type === 'delete-shot') {
+      const { error } = await supabase.from('shots').upsert({
+        user_id: userId,
+        id: row.id!,
+        owner: '',
+        slot: '',
+        order: 0,
+        caption: null,
+        created_at: row.at,
+        updated_at: Date.now(),
+        storage_path: null,
+        deleted: true,
+      })
+      if (error) throw error
+      await supabase.storage.from(IMAGE_BUCKET).remove([shotPath(userId, row.id!)])
     } else {
       const { error } = await supabase.from('blocks').upsert({
         user_id: userId,
@@ -278,6 +467,11 @@ async function push(userId: string): Promise<void> {
     }
     setCursor('pushBlocks', max)
   }
+
+  // --- pair journal ---
+  await pushDocs(userId, 'pweeks')
+  await pushDocs(userId, 'pdays')
+  await pushShots(userId)
 }
 
 // ---------------------------------------------------------------------------
@@ -457,6 +651,21 @@ function subscribeRealtime(userId: string) {
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'blocks', filter: `user_id=eq.${userId}` },
+      () => scheduleSync(400),
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'pweeks', filter: `user_id=eq.${userId}` },
+      () => scheduleSync(400),
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'pdays', filter: `user_id=eq.${userId}` },
+      () => scheduleSync(400),
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'shots', filter: `user_id=eq.${userId}` },
       () => scheduleSync(400),
     )
     .subscribe()

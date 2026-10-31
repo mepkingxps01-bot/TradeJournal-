@@ -1,7 +1,15 @@
 import { db } from './db'
+import { emitLocalChange } from './syncBus'
 import { parsePnl } from './format'
 import { NARRATIVE_RIGHT, NARRATIVE_TIMING } from './template'
 import type { Day, Shot, Trade } from '../types'
+
+/** Queue cloud deletions for the pair journal (no-op cost when sync is off). */
+async function tombstone(type: 'delete-pweek' | 'delete-pday' | 'delete-shot', ids: string[]) {
+  if (!ids.length) return
+  const at = Date.now()
+  await db.outbox.bulkAdd(ids.map((id) => ({ type, date: '', id, at })))
+}
 
 function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
@@ -56,6 +64,7 @@ export async function setWeekField(pair: string, weekStart: string, key: string,
     w.fields[key] = value
     w.updatedAt = Date.now()
   })
+  emitLocalChange()
 }
 
 export async function setDayField(pair: string, weekStart: string, dow: number, key: string, value: string) {
@@ -64,6 +73,7 @@ export async function setDayField(pair: string, weekStart: string, dow: number, 
     d.fields[key] = value
     d.updatedAt = Date.now()
   })
+  emitLocalChange()
 }
 
 export async function patchDay(
@@ -74,16 +84,27 @@ export async function patchDay(
 ) {
   const id = await ensureDay(pair, weekStart, dow)
   await db.pdays.update(id, { ...patch, updatedAt: Date.now() })
+  emitLocalChange()
 }
 
 /** Delete a whole week of one pair: its days and every pasted chart. */
 export async function deleteWeek(pair: string, weekStart: string) {
-  await db.transaction('rw', db.pweeks, db.pdays, db.shots, async () => {
-    await db.shots.where('owner').startsWith(`day:${pair}:${weekStart}:`).delete()
-    await db.shots.where('owner').equals(weekOwner(pair, weekStart)).delete()
-    await db.pdays.where('[pair+weekStart]').equals([pair, weekStart]).delete()
+  await db.transaction('rw', db.pweeks, db.pdays, db.shots, db.outbox, async () => {
+    const dayShots = db.shots.where('owner').startsWith(`day:${pair}:${weekStart}:`)
+    const weekShots = db.shots.where('owner').equals(weekOwner(pair, weekStart))
+    const days = db.pdays.where('[pair+weekStart]').equals([pair, weekStart])
+    await tombstone('delete-shot', [
+      ...((await dayShots.primaryKeys()) as string[]),
+      ...((await weekShots.primaryKeys()) as string[]),
+    ])
+    await tombstone('delete-pday', (await days.primaryKeys()) as string[])
+    await tombstone('delete-pweek', [weekId(pair, weekStart)])
+    await dayShots.delete()
+    await weekShots.delete()
+    await days.delete()
     await db.pweeks.delete(weekId(pair, weekStart))
   })
+  emitLocalChange()
 }
 
 // ---------------------------------------------------------------------------
@@ -97,6 +118,7 @@ async function editTrades(pair: string, weekStart: string, dow: number, fn: (t: 
     if (!day) return
     await db.pdays.update(id, { trades: fn(day.trades), updatedAt: Date.now() })
   })
+  emitLocalChange()
 }
 
 export function addTrade(pair: string, weekStart: string, dow: number) {
@@ -112,10 +134,10 @@ export function updateTrade(pair: string, weekStart: string, dow: number, id: st
 
 export async function deleteTrade(pair: string, weekStart: string, dow: number, id: string) {
   await editTrades(pair, weekStart, dow, (t) => t.filter((x) => x.id !== id))
-  await db.shots
-    .where('[owner+slot]')
-    .equals([dayOwner(pair, weekStart, dow), `trade:${id}`])
-    .delete()
+  const shots = db.shots.where('[owner+slot]').equals([dayOwner(pair, weekStart, dow), `trade:${id}`])
+  await tombstone('delete-shot', (await shots.primaryKeys()) as string[])
+  await shots.delete()
+  emitLocalChange()
 }
 
 // ---------------------------------------------------------------------------
@@ -140,16 +162,23 @@ export async function addShots(owner: string, slot: string, blobs: Blob[]) {
       blob,
       caption: '',
       createdAt: now + i,
+      updatedAt: now + i,
     })),
   )
+  emitLocalChange()
 }
 
-export function deleteShot(id: string) {
-  return db.shots.delete(id)
+export async function deleteShot(id: string) {
+  await db.transaction('rw', db.shots, db.outbox, async () => {
+    await tombstone('delete-shot', [id])
+    await db.shots.delete(id)
+  })
+  emitLocalChange()
 }
 
-export function setShotCaption(id: string, caption: string) {
-  return db.shots.update(id, { caption })
+export async function setShotCaption(id: string, caption: string) {
+  await db.shots.update(id, { caption, updatedAt: Date.now() })
+  emitLocalChange()
 }
 
 // ---------------------------------------------------------------------------

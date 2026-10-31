@@ -6,6 +6,7 @@ import { currentWeekStart, mondayOf, todayISO, weekLabel } from '../../lib/forma
 import { computeStats } from '../../lib/journal'
 import { DAY_NAMES, PAIRS } from '../../lib/template'
 import Calendar from './Calendar'
+import SyncBar from '../SyncBar'
 import { StatsLine, verdictMark } from './WeekPage'
 
 /** One pair's journal: its weeks, newest first, and its all-time stats. */
@@ -42,6 +43,8 @@ export default function PairHome() {
           เสาร์–อาทิตย์ทำ Weekend Prep · ทุกวันเขียนแผนในแท็บวัน · จบวันเลือก Narrative ถูก/ผิด
         </p>
       </header>
+
+      <SyncBar />
 
       <div className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
         <button

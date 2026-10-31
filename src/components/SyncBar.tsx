@@ -196,8 +196,8 @@ export default function SyncBar() {
             <div className="space-y-3">
               <p className="text-xs text-slate-400">
                 Signed in as{' '}
-                <span className="text-slate-200">{status.email}</span>. Your days,
-                notes and chart images sync automatically.
+                <span className="text-slate-200">{status.email}</span>. Your weeks,
+                days, trades and chart images sync automatically.
               </p>
               {status.state === 'error' && status.error && (
                 <p className="text-xs text-red-400">Last error: {status.error}</p>

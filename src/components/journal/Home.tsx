@@ -5,6 +5,7 @@ import { currentWeekStart, formatMoney, weekLabel } from '../../lib/format'
 import { computeStats } from '../../lib/journal'
 import { PAIRS } from '../../lib/template'
 import Calendar from './Calendar'
+import SyncBar from '../SyncBar'
 
 /** Start page: one card per pair's journal. */
 export default function Home() {
@@ -22,6 +23,8 @@ export default function Home() {
         <h1 className="text-2xl font-bold tracking-tight text-white">📈 Narrative Training Journal</h1>
         <p className="mt-1 text-sm text-slate-400">แยก Template ตามคู่เงิน เลือกคู่ที่จะเขียน</p>
       </header>
+
+      <SyncBar />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {PAIRS.map((pair) => {

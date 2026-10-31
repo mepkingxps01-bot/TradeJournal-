@@ -90,6 +90,8 @@ export interface Shot {
   blob: Blob
   caption: string
   createdAt: number
+  /** Last local change (caption edit etc.); drives cloud sync. Older rows lack it. */
+  updatedAt?: number
 }
 
 export function emptyDay(date: string): DayEntry {

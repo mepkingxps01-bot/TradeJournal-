@@ -15,6 +15,10 @@ function LegacyWeek() {
   return <Navigate to={`/p/${PAIRS[0]}/week/${ws}${rest ? `/${rest}` : ''}`} replace />
 }
 
+// Ask the browser not to auto-clear this site's local journal (IndexedDB)
+// when disk space runs low. Best-effort; some browsers decide on their own.
+void navigator.storage?.persist?.().catch(() => false)
+
 // Kick off cloud sync (no-op unless Supabase env vars are configured).
 startSync()
 
