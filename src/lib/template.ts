@@ -1,3 +1,12 @@
+import type { DayBias } from '../types'
+
+/** Day plan buttons: which side to look for on this pair today. */
+export const BIAS_OPTIONS: { value: Exclude<DayBias, ''>; label: string; mark: string; cls: string; text: string }[] = [
+  { value: 'buy', label: 'Buy', mark: '▲', cls: 'border-emerald-500 bg-emerald-500/15 text-emerald-200', text: 'text-emerald-400' },
+  { value: 'sell', label: 'Sell', mark: '▼', cls: 'border-rose-500 bg-rose-500/15 text-rose-200', text: 'text-rose-400' },
+  { value: 'none', label: 'No Trade', mark: '–', cls: 'border-slate-400 bg-slate-500/15 text-slate-200', text: 'text-slate-400' },
+]
+
 // The Narrative Training template: every question on the week and day pages.
 // Keys are stored in Week.fields / Day.fields, so never rename a key once it
 // has data — change the label instead.
