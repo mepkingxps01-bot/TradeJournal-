@@ -64,6 +64,8 @@ export interface Trade {
   pnl: string
 }
 
+export type DayBias = '' | 'buy' | 'sell' | 'none'
+
 export interface Day {
   /** `${pair}|${weekStart}|${dow}` — dow 0 = Mon … 4 = Fri. */
   id: string
@@ -72,6 +74,8 @@ export interface Day {
   dow: number
   /** '' until picked; otherwise one of NARRATIVE_OPTIONS. */
   narrative: string
+  /** Plan for the day: '' (not set), 'buy', 'sell' or 'none' (no trade). */
+  bias?: DayBias
   mistakes: string[]
   fields: Record<string, string>
   trades: Trade[]

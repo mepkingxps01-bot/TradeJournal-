@@ -14,6 +14,7 @@ import {
   type Stats,
 } from '../../lib/journal'
 import {
+  BIAS_OPTIONS,
   DAY_NAMES,
   NARRATIVE_OPTIONS,
   NARRATIVE_RIGHT,
@@ -284,9 +285,12 @@ export default function WeekPage() {
             Week
           </button>
           {DAY_NAMES.map((n, i) => {
-            const v = verdictMark(days.find((d) => d.dow === i)?.narrative ?? '')
+            const d = days.find((x) => x.dow === i)
+            const v = verdictMark(d?.narrative ?? '')
+            const b = BIAS_OPTIONS.find((o) => o.value === d?.bias)
             return (
               <button key={n.short} onClick={() => open(i)} className={tabCls(dow === i)}>
+                {b && <span className={`mr-0.5 ${b.text}`} title={b.label}>{b.mark}</span>}
                 {n.short} <span className="text-xs opacity-70">{shortDate(addDaysISO(ws, i)).split(' ')[0]}</span>{' '}
                 <span className={dow === i ? '' : v.cls}>{v.mark}</span>
               </button>

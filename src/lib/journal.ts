@@ -80,7 +80,7 @@ export async function patchDay(
   pair: string,
   weekStart: string,
   dow: number,
-  patch: Partial<Pick<Day, 'narrative' | 'mistakes'>>,
+  patch: Partial<Pick<Day, 'narrative' | 'mistakes' | 'bias'>>,
 ) {
   const id = await ensureDay(pair, weekStart, dow)
   await db.pdays.update(id, { ...patch, updatedAt: Date.now() })

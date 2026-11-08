@@ -10,6 +10,7 @@ import {
   updateTrade,
 } from '../../lib/journal'
 import {
+  BIAS_OPTIONS,
   DAY_NAMES,
   DAY_SECTIONS,
   LEARNED,
@@ -134,6 +135,21 @@ export default function DayTab({
           {DAY_NAMES[dow].th} · {shortDate(addDaysISO(ws, dow))}
         </span>
       </h2>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-sm font-medium text-slate-300">วันนี้มองหา:</span>
+        {BIAS_OPTIONS.map((b) => (
+          <button
+            key={b.value}
+            onClick={() => patchDay(pair, ws, dow, { bias: day?.bias === b.value ? '' : b.value })}
+            className={`rounded-full border px-4 py-1 text-sm font-medium ${
+              day?.bias === b.value ? b.cls : 'border-slate-700 text-slate-400 hover:border-slate-500'
+            }`}
+          >
+            {b.mark} {b.label}
+          </button>
+        ))}
+      </div>
 
       {DAY_SECTIONS.map((sec) => (
         <Card key={sec.title} title={sec.title}>
