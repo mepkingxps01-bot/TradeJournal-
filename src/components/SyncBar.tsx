@@ -19,8 +19,16 @@ function timeAgo(ts: number | null): string {
 
 export default function SyncBar() {
   const status = useStatus()
-  // Sync isn't configured for this build — stay silent.
-  if (!isSupabaseConfigured) return null
+  // Sync isn't configured for this build: say so loudly, because the journal
+  // then lives only in this browser and can be lost if its storage is cleared.
+  if (!isSupabaseConfigured)
+    return (
+      <div className="mb-6 rounded-xl border border-amber-700/60 bg-amber-950/40 p-3 text-sm text-amber-200">
+        <span className="font-medium">Cloud sync is off.</span> Your journal is saved only in
+        this browser. Clearing browser data, a private window, or a different address/port
+        will show an empty journal. Connect Supabase (see README) to keep it in the cloud.
+      </div>
+    )
 
   const signedIn = Boolean(status.userId)
 
@@ -51,7 +59,11 @@ export default function SyncBar() {
         <span className={`h-2.5 w-2.5 rounded-full ${dot}`} />
         <span className="font-medium">{label}</span>
         {status.state === 'error' && status.error && (
-          <span className="text-xs text-red-400">· {status.error}</span>
+          <span className="text-xs text-red-400">
+            · {/fetch|network/i.test(status.error)
+              ? 'Cannot reach the cloud. If your Supabase project is paused, restore it in the Supabase dashboard.'
+              : status.error}
+          </span>
         )}
       </div>
       <button

@@ -7,4 +7,7 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   base: process.env.VITE_BASE ?? '/',
+  // Always use the same port: browser storage is per address, so a dev server
+  // that drifts to 5174 would open an empty journal.
+  server: { port: 5173, strictPort: true },
 })
