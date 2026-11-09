@@ -78,6 +78,8 @@ export interface Day {
   narrative: string
   /** Plan for the day: '' (not set), 'buy', 'sell' or 'none' (no trade). */
   bias?: DayBias
+  /** RR typed straight into the calendar; when set it replaces the trades' sum. */
+  rrManual?: string
   mistakes: string[]
   fields: Record<string, string>
   trades: Trade[]

@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../lib/db'
-import { addDaysISO, formatMoney, formatRR, mondayOf, shortDate, todayISO } from '../../lib/format'
-import { dayPnl, dayRR, hasRR } from '../../lib/journal'
+import { addDaysISO, formatMoney, formatRR, mondayOf, parsePnl, shortDate, todayISO } from '../../lib/format'
+import { dayPnl, dayRR, hasRR, patchDay, tradesRR } from '../../lib/journal'
 import { DAY_NAMES, PAIRS } from '../../lib/template'
 import type { Day } from '../../types'
 import { verdictMark } from './WeekPage'
@@ -24,6 +24,35 @@ function hasContent(d: Day | undefined, withCharts: Set<string>): boolean {
     d.trades.length > 0 ||
     Object.values(d.fields).some((v) => v.trim()) ||
     withCharts.has(`${d.weekStart}:${d.dow}`)
+  )
+}
+
+/**
+ * Small RR box typed straight into the calendar. Saves on blur / Enter; an
+ * empty box falls back to the sum of the day's trades (shown as placeholder).
+ */
+function RRInput({ pair, ws, dow, day, className = '' }: { pair: string; ws: string; dow: number; day?: Day; className?: string }) {
+  const [v, setV] = useState(day?.rrManual ?? '')
+  useEffect(() => setV(day?.rrManual ?? ''), [day?.rrManual])
+  const save = () => {
+    if (v.trim() !== (day?.rrManual ?? '').trim()) void patchDay(pair, ws, dow, { rrManual: v.trim() })
+  }
+  const n = v.trim() ? parsePnl(v) : 0
+  const sum = tradesRR(day)
+  return (
+    <input
+      value={v}
+      onChange={(e) => setV(e.target.value)}
+      onBlur={save}
+      onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+      onClick={(e) => e.stopPropagation()}
+      placeholder={sum ? `${formatRR(sum)}` : 'RR'}
+      inputMode="decimal"
+      title="ใส่ RR ของวันนี้ (เว้นว่าง = รวมจากไม้เทรด)"
+      className={`w-full min-w-0 rounded border border-slate-700/70 bg-slate-950/70 px-1 py-0.5 text-[11px] outline-none placeholder:text-slate-600 focus:border-sky-500 ${
+        n > 0 ? 'text-emerald-300' : n < 0 ? 'text-rose-300' : 'text-slate-200'
+      } ${className}`}
+    />
   )
 }
 
@@ -105,12 +134,19 @@ export default function Calendar({ pair }: { pair?: string }) {
             วันนี้
           </button>
         )}
-        {monthTrades > 0 && (
+        {(monthTrades > 0 || monthHasRR) && (
           <span className="ml-auto text-sm text-slate-400">
-            รวมเดือนนี้ {monthTrades} ไม้ · <b className={pnlCls(monthPnl)}>{formatMoney(monthPnl)}</b>
+            รวมเดือนนี้
+            {monthTrades > 0 && (
+              <>
+                {' '}
+                {monthTrades} ไม้ · <b className={pnlCls(monthPnl)}>{formatMoney(monthPnl)}</b>
+              </>
+            )}
             {monthHasRR && (
               <>
-                {' '}· <b className={pnlCls(monthRR)}>{formatRR(monthRR)}</b>
+                {monthTrades > 0 ? ' · ' : ' '}
+                <b className={pnlCls(monthRR)}>{formatRR(monthRR)}</b>
               </>
             )}
           </span>
@@ -158,7 +194,7 @@ export default function Calendar({ pair }: { pair?: string }) {
           }
 
           if (!pair) {
-            const traded = daysOn(iso).filter((d) => d.trades.length > 0)
+            const traded = daysOn(iso).filter((d) => d.trades.length > 0 || hasRR(d))
             const total = traded.reduce((s, d) => s + dayPnl(d), 0)
             const trades = traded.reduce((s, d) => s + d.trades.length, 0)
             const rr = traded.reduce((s, d) => s + dayRR(d), 0)
@@ -170,17 +206,17 @@ export default function Calendar({ pair }: { pair?: string }) {
                 className={`${base} min-h-14 hover:border-slate-500 sm:min-h-16 ${trades ? 'bg-slate-800/60' : 'bg-slate-950/30'}`}
               >
                 <span className={`text-xs ${isToday ? 'font-bold text-sky-300' : 'text-slate-300'}`}>{dateNum}</span>
-                {trades > 0 && (
+                {traded.length > 0 && (
                   <div className="mt-1 text-[10px] leading-tight sm:text-[11px]">
-                    <div className={`font-semibold ${pnlCls(total)}`}>{formatMoney(total)}</div>
+                    {trades > 0 && <div className={`font-semibold ${pnlCls(total)}`}>{formatMoney(total)}</div>}
                     {anyRR && <div className={`font-semibold ${pnlCls(rr)}`}>{formatRR(rr)}</div>}
-                    <div className="text-slate-500">{trades} ไม้</div>
+                    {trades > 0 && <div className="text-slate-500">{trades} ไม้</div>}
                     <div className="mt-0.5 hidden space-y-px sm:block">
                       {traded.map((d) => (
                         <div key={d.pair} className="flex justify-between gap-1 text-[10px]">
                           <span className="truncate text-slate-500">{d.pair}</span>
                           <span className={pnlCls(dayPnl(d))}>
-                            {formatMoney(dayPnl(d))}
+                            {d.trades.length > 0 && formatMoney(dayPnl(d))}
                             {hasRR(d) && <span className={`ml-1 ${pnlCls(dayRR(d))}`}>{formatRR(dayRR(d))}</span>}
                           </span>
                         </div>
@@ -198,10 +234,15 @@ export default function Calendar({ pair }: { pair?: string }) {
           const pnl = dayPnl(d)
           const trades = d?.trades.length ?? 0
           return (
-            <button
+            <div
               key={iso}
+              role="button"
+              tabIndex={0}
               onClick={() => navigate(dayPath(pair, ws, dow))}
-              className={`${base} min-h-14 hover:border-slate-500 sm:min-h-16 ${filled ? 'bg-slate-800/60' : 'bg-slate-950/30'}`}
+              onKeyDown={(e) => e.key === 'Enter' && e.target === e.currentTarget && navigate(dayPath(pair, ws, dow))}
+              className={`${base} flex min-h-14 cursor-pointer flex-col hover:border-slate-500 sm:min-h-16 ${
+                filled || hasRR(d) ? 'bg-slate-800/60' : 'bg-slate-950/30'
+              }`}
             >
               <div className="flex items-center justify-between">
                 <span className={`text-xs ${isToday ? 'font-bold text-sky-300' : 'text-slate-300'}`}>{dateNum}</span>
@@ -215,10 +256,10 @@ export default function Calendar({ pair }: { pair?: string }) {
                 <div className="mt-1 text-[10px] leading-tight sm:text-[11px]">
                   <div className="text-slate-400">{trades} ไม้</div>
                   <div className={pnlCls(pnl)}>{formatMoney(pnl)}</div>
-                  {hasRR(d) && <div className={`font-semibold ${pnlCls(dayRR(d))}`}>{formatRR(dayRR(d))}</div>}
                 </div>
               )}
-            </button>
+              <RRInput pair={pair} ws={ws} dow={dow} day={d} className="mt-auto font-semibold" />
+            </div>
           )
         })}
       </div>
@@ -228,10 +269,10 @@ export default function Calendar({ pair }: { pair?: string }) {
       <p className="mt-2 text-[11px] text-slate-500">
         {pair ? (
           <>
-            ✓ ถูก · ~ ถูกแต่ Timing ผิด · ✗ ผิด · <span className="text-sky-400">●</span> มีบันทึก · เสาร์–อาทิตย์ = Weekend Prep สัปดาห์ถัดไป
+            ✓ ถูก · ~ ถูกแต่ Timing ผิด · ✗ ผิด · <span className="text-sky-400">●</span> มีบันทึก · ช่อง RR พิมพ์ได้เลย (เว้นว่าง = รวมจากไม้เทรด) · เสาร์–อาทิตย์ = Weekend Prep สัปดาห์ถัดไป
           </>
         ) : (
-          'P&L รวมทุกคู่ต่อวัน · กดที่วันเพื่อดูแยกตามคู่'
+          'P&L รวมทุกคู่ต่อวัน · กดที่วันเพื่อดูแยกตามคู่และใส่ RR'
         )}
       </p>
     </section>
@@ -266,14 +307,14 @@ function DayBreakdown({ iso, days }: { iso: string; days: Day[] }) {
           const v = verdictMark(d?.narrative ?? '')
           const trades = d?.trades.length ?? 0
           return (
-            <li key={p}>
-              <Link to={dayPath(p, ws, dow)} className="flex items-center gap-3 py-1.5 hover:text-white">
-                <span className="w-20 font-semibold text-amber-300">{p}</span>
-                <span className={`w-4 ${v.cls}`}>{v.mark}</span>
-                <span className="flex-1 text-slate-400">{trades ? `${trades} ไม้` : '—'}</span>
-                {hasRR(d) && <span className={pnlCls(dayRR(d))}>{formatRR(dayRR(d))}</span>}
-                <span className={pnlCls(dayPnl(d))}>{trades ? formatMoney(dayPnl(d)) : ''}</span>
-                <span className="text-xs text-sky-400">เปิด →</span>
+            <li key={p} className="flex items-center gap-3 py-1.5">
+              <span className="w-20 font-semibold text-amber-300">{p}</span>
+              <span className={`w-4 ${v.cls}`}>{v.mark}</span>
+              <span className="flex-1 text-slate-400">{trades ? `${trades} ไม้` : '—'}</span>
+              <span className={pnlCls(dayPnl(d))}>{trades ? formatMoney(dayPnl(d)) : ''}</span>
+              <RRInput pair={p} ws={ws} dow={dow} day={d} className="!w-20 text-sm" />
+              <Link to={dayPath(p, ws, dow)} className="text-xs text-sky-400 hover:underline">
+                เปิด →
               </Link>
             </li>
           )
