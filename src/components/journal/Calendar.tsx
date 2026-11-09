@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../lib/db'
 import { addDaysISO, formatMoney, formatRR, mondayOf, parsePnl, shortDate, todayISO } from '../../lib/format'
-import { dayPnl, dayRR, hasRR, patchDay, tradesRR } from '../../lib/journal'
+import { dayCommission, dayPnl, dayRR, hasCommission, hasRR, patchDay, tradesCommission, tradesRR } from '../../lib/journal'
 import { DAY_NAMES, PAIRS } from '../../lib/template'
 import type { Day } from '../../types'
 import { verdictMark } from './WeekPage'
@@ -28,17 +28,35 @@ function hasContent(d: Day | undefined, withCharts: Set<string>): boolean {
 }
 
 /**
- * Small RR box typed straight into the calendar. Saves on blur / Enter; an
- * empty box falls back to the sum of the day's trades (shown as placeholder).
+ * Small box typed straight into the calendar (RR or commission). Saves on
+ * blur / Enter; an empty box falls back to the day's trades (placeholder).
  */
-function RRInput({ pair, ws, dow, day, className = '' }: { pair: string; ws: string; dow: number; day?: Day; className?: string }) {
-  const [v, setV] = useState(day?.rrManual ?? '')
-  useEffect(() => setV(day?.rrManual ?? ''), [day?.rrManual])
+function DayInput({
+  kind,
+  pair,
+  ws,
+  dow,
+  day,
+  className = '',
+}: {
+  kind: 'rr' | 'comm'
+  pair: string
+  ws: string
+  dow: number
+  day?: Day
+  className?: string
+}) {
+  const key = kind === 'rr' ? 'rrManual' : 'commManual'
+  const stored = day?.[key] ?? ''
+  const [v, setV] = useState(stored)
+  useEffect(() => setV(stored), [stored])
   const save = () => {
-    if (v.trim() !== (day?.rrManual ?? '').trim()) void patchDay(pair, ws, dow, { rrManual: v.trim() })
+    if (v.trim() !== stored.trim()) void patchDay(pair, ws, dow, { [key]: v.trim() })
   }
   const n = v.trim() ? parsePnl(v) : 0
-  const sum = tradesRR(day)
+  const sum = kind === 'rr' ? tradesRR(day) : tradesCommission(day)
+  const placeholder = kind === 'rr' ? (sum ? formatRR(sum) : 'RR') : sum ? `คอม ${formatMoney(sum)}` : 'คอม'
+  const color = kind === 'comm' ? 'text-amber-200' : n > 0 ? 'text-emerald-300' : n < 0 ? 'text-rose-300' : 'text-slate-200'
   return (
     <input
       value={v}
@@ -46,12 +64,10 @@ function RRInput({ pair, ws, dow, day, className = '' }: { pair: string; ws: str
       onBlur={save}
       onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
       onClick={(e) => e.stopPropagation()}
-      placeholder={sum ? `${formatRR(sum)}` : 'RR'}
+      placeholder={placeholder}
       inputMode="decimal"
-      title="ใส่ RR ของวันนี้ (เว้นว่าง = รวมจากไม้เทรด)"
-      className={`w-full min-w-0 rounded border border-slate-700/70 bg-slate-950/70 px-1 py-0.5 text-[11px] outline-none placeholder:text-slate-600 focus:border-sky-500 ${
-        n > 0 ? 'text-emerald-300' : n < 0 ? 'text-rose-300' : 'text-slate-200'
-      } ${className}`}
+      title={kind === 'rr' ? 'ใส่ RR ของวันนี้ (เว้นว่าง = รวมจากไม้เทรด)' : 'ใส่ค่าคอมของวันนี้ (เว้นว่าง = รวมจากไม้เทรด)'}
+      className={`w-full min-w-0 rounded border border-slate-700/70 bg-slate-950/70 px-1 py-0.5 text-[11px] outline-none placeholder:text-slate-600 focus:border-sky-500 ${color} ${className}`}
     />
   )
 }
@@ -104,6 +120,7 @@ export default function Calendar({ pair }: { pair?: string }) {
   const monthTrades = inMonth.reduce((s, d) => s + d.trades.length, 0)
   const monthRR = inMonth.reduce((s, d) => s + dayRR(d), 0)
   const monthHasRR = inMonth.some((d) => hasRR(d))
+  const monthComm = inMonth.reduce((s, d) => s + dayCommission(d), 0)
 
   const shift = (n: number) => {
     const dt = new Date(y, m - 1 + n, 1)
@@ -134,7 +151,7 @@ export default function Calendar({ pair }: { pair?: string }) {
             วันนี้
           </button>
         )}
-        {(monthTrades > 0 || monthHasRR) && (
+        {(monthTrades > 0 || monthHasRR || monthComm > 0) && (
           <span className="ml-auto text-sm text-slate-400">
             รวมเดือนนี้
             {monthTrades > 0 && (
@@ -147,6 +164,12 @@ export default function Calendar({ pair }: { pair?: string }) {
               <>
                 {monthTrades > 0 ? ' · ' : ' '}
                 <b className={pnlCls(monthRR)}>{formatRR(monthRR)}</b>
+              </>
+            )}
+            {monthComm > 0 && (
+              <>
+                {' '}· ค่าคอม <b className="text-amber-300">{formatMoney(-monthComm)}</b> · สุทธิ{' '}
+                <b className={pnlCls(monthPnl - monthComm)}>{formatMoney(monthPnl - monthComm)}</b>
               </>
             )}
           </span>
@@ -194,11 +217,12 @@ export default function Calendar({ pair }: { pair?: string }) {
           }
 
           if (!pair) {
-            const traded = daysOn(iso).filter((d) => d.trades.length > 0 || hasRR(d))
+            const traded = daysOn(iso).filter((d) => d.trades.length > 0 || hasRR(d) || hasCommission(d))
             const total = traded.reduce((s, d) => s + dayPnl(d), 0)
             const trades = traded.reduce((s, d) => s + d.trades.length, 0)
             const rr = traded.reduce((s, d) => s + dayRR(d), 0)
             const anyRR = traded.some((d) => hasRR(d))
+            const comm = traded.reduce((s, d) => s + dayCommission(d), 0)
             return (
               <button
                 key={iso}
@@ -210,6 +234,7 @@ export default function Calendar({ pair }: { pair?: string }) {
                   <div className="mt-1 text-[10px] leading-tight sm:text-[11px]">
                     {trades > 0 && <div className={`font-semibold ${pnlCls(total)}`}>{formatMoney(total)}</div>}
                     {anyRR && <div className={`font-semibold ${pnlCls(rr)}`}>{formatRR(rr)}</div>}
+                    {comm > 0 && <div className="text-amber-300/80">คอม {formatMoney(-comm)}</div>}
                     {trades > 0 && <div className="text-slate-500">{trades} ไม้</div>}
                     <div className="mt-0.5 hidden space-y-px sm:block">
                       {traded.map((d) => (
@@ -241,7 +266,7 @@ export default function Calendar({ pair }: { pair?: string }) {
               onClick={() => navigate(dayPath(pair, ws, dow))}
               onKeyDown={(e) => e.key === 'Enter' && e.target === e.currentTarget && navigate(dayPath(pair, ws, dow))}
               className={`${base} flex min-h-14 cursor-pointer flex-col hover:border-slate-500 sm:min-h-16 ${
-                filled || hasRR(d) ? 'bg-slate-800/60' : 'bg-slate-950/30'
+                filled || hasRR(d) || hasCommission(d) ? 'bg-slate-800/60' : 'bg-slate-950/30'
               }`}
             >
               <div className="flex items-center justify-between">
@@ -258,7 +283,10 @@ export default function Calendar({ pair }: { pair?: string }) {
                   <div className={pnlCls(pnl)}>{formatMoney(pnl)}</div>
                 </div>
               )}
-              <RRInput pair={pair} ws={ws} dow={dow} day={d} className="mt-auto font-semibold" />
+              <div className="mt-auto space-y-0.5 pt-1">
+                <DayInput kind="rr" pair={pair} ws={ws} dow={dow} day={d} className="font-semibold" />
+                <DayInput kind="comm" pair={pair} ws={ws} dow={dow} day={d} />
+              </div>
             </div>
           )
         })}
@@ -269,10 +297,10 @@ export default function Calendar({ pair }: { pair?: string }) {
       <p className="mt-2 text-[11px] text-slate-500">
         {pair ? (
           <>
-            ✓ ถูก · ~ ถูกแต่ Timing ผิด · ✗ ผิด · <span className="text-sky-400">●</span> มีบันทึก · ช่อง RR พิมพ์ได้เลย (เว้นว่าง = รวมจากไม้เทรด) · เสาร์–อาทิตย์ = Weekend Prep สัปดาห์ถัดไป
+            ✓ ถูก · ~ ถูกแต่ Timing ผิด · ✗ ผิด · <span className="text-sky-400">●</span> มีบันทึก · ช่อง RR / ค่าคอม พิมพ์ได้เลย (เว้นว่าง = รวมจากไม้เทรด) · เสาร์–อาทิตย์ = Weekend Prep สัปดาห์ถัดไป
           </>
         ) : (
-          'P&L รวมทุกคู่ต่อวัน · กดที่วันเพื่อดูแยกตามคู่และใส่ RR'
+          'P&L รวมทุกคู่ต่อวัน · กดที่วันเพื่อดูแยกตามคู่และใส่ RR / ค่าคอม'
         )}
       </p>
     </section>
@@ -286,6 +314,7 @@ function DayBreakdown({ iso, days }: { iso: string; days: Day[] }) {
   const total = days.reduce((s, d) => s + dayPnl(d), 0)
   const rr = days.reduce((s, d) => s + dayRR(d), 0)
   const anyRR = days.some((d) => hasRR(d))
+  const comm = days.reduce((s, d) => s + dayCommission(d), 0)
   return (
     <div className="mt-3 rounded-lg border border-slate-700 bg-slate-950/60 p-3">
       <div className="mb-2 flex items-center justify-between text-sm">
@@ -297,6 +326,12 @@ function DayBreakdown({ iso, days }: { iso: string; days: Day[] }) {
           {anyRR && (
             <>
               {' '}· <b className={pnlCls(rr)}>{formatRR(rr)}</b>
+            </>
+          )}
+          {comm > 0 && (
+            <>
+              {' '}· ค่าคอม <b className="text-amber-300">{formatMoney(-comm)}</b> · สุทธิ{' '}
+              <b className={pnlCls(total - comm)}>{formatMoney(total - comm)}</b>
             </>
           )}
         </span>
@@ -312,7 +347,8 @@ function DayBreakdown({ iso, days }: { iso: string; days: Day[] }) {
               <span className={`w-4 ${v.cls}`}>{v.mark}</span>
               <span className="flex-1 text-slate-400">{trades ? `${trades} ไม้` : '—'}</span>
               <span className={pnlCls(dayPnl(d))}>{trades ? formatMoney(dayPnl(d)) : ''}</span>
-              <RRInput pair={p} ws={ws} dow={dow} day={d} className="!w-20 text-sm" />
+              <DayInput kind="rr" pair={p} ws={ws} dow={dow} day={d} className="!w-16 text-sm" />
+              <DayInput kind="comm" pair={p} ws={ws} dow={dow} day={d} className="!w-20 text-sm" />
               <Link to={dayPath(p, ws, dow)} className="text-xs text-sky-400 hover:underline">
                 เปิด →
               </Link>

@@ -4,7 +4,9 @@ import {
   addShots,
   addTrade,
   dayOwner,
+  dayCommission,
   dayRR,
+  hasCommission,
   hasRR,
   deleteTrade,
   patchDay,
@@ -37,6 +39,14 @@ function TradeCard({ pair, ws, dow, trade, n }: { pair: string; ws: string; dow:
   const [rr, setRr] = useState(trade.rr ?? '')
   const rrTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => setRr(trade.rr ?? ''), [trade.rr])
+  const [comm, setComm] = useState(trade.commission ?? '')
+  const commTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => setComm(trade.commission ?? ''), [trade.commission])
+  function changeComm(v: string) {
+    setComm(v)
+    if (commTimer.current) clearTimeout(commTimer.current)
+    commTimer.current = setTimeout(() => save({ commission: v }), 400)
+  }
   const save = (patch: Partial<Trade>) => updateTrade(pair, ws, dow, trade.id, patch)
   function changePnl(v: string) {
     setPnl(v)
@@ -85,6 +95,16 @@ function TradeCard({ pair, ws, dow, trade, n }: { pair: string; ws: string; dow:
             className={`w-24 rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-sky-500 ${
               rrValue > 0 ? 'text-emerald-300' : rrValue < 0 ? 'text-rose-300' : 'text-slate-200'
             }`}
+          />
+        </label>
+        <label className="flex items-center gap-1 text-sm text-slate-400">
+          ค่าคอม
+          <input
+            value={comm}
+            onChange={(e) => changeComm(e.target.value)}
+            placeholder="เช่น 3.5"
+            inputMode="decimal"
+            className="w-20 rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-amber-200 outline-none focus:border-sky-500"
           />
         </label>
         <button
@@ -180,7 +200,7 @@ export default function DayTab({
         </Card>
       ))}
 
-      <Card title={`Trades${trades.length ? ` · ${trades.length} ไม้ · ${formatMoney(total)}${hasRR(day) ? ` · ${formatRR(dayRR(day))}` : ''}` : ''}`}>
+      <Card title={`Trades${trades.length ? ` · ${trades.length} ไม้ · ${formatMoney(total)}${hasRR(day) ? ` · ${formatRR(dayRR(day))}` : ''}${hasCommission(day) ? ` · ค่าคอม ${formatMoney(-dayCommission(day))} · สุทธิ ${formatMoney(total - dayCommission(day))}` : ''}` : ''}`}>
         {trades.map((t, i) => (
           <TradeCard key={t.id} pair={pair} ws={ws} dow={dow} trade={t} n={i + 1} />
         ))}
