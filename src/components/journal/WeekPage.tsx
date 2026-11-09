@@ -1,10 +1,12 @@
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../lib/db'
-import { addDaysISO, formatMoney, shortDate, weekLabel } from '../../lib/format'
+import { addDaysISO, formatMoney, formatRR, shortDate, weekLabel } from '../../lib/format'
 import {
   computeStats,
   dayPnl,
+  dayRR,
+  hasRR,
   deleteWeek,
   listDays,
   patchDay,
@@ -92,6 +94,7 @@ function Scoreboard({
             <th className="py-2 pr-3 font-medium">Narrative</th>
             <th className="py-2 pr-3 font-medium">พลาดเพราะ</th>
             <th className="py-2 pr-3 font-medium">ไม้</th>
+            <th className="py-2 pr-3 text-right font-medium">RR</th>
             <th className="py-2 text-right font-medium">P&L</th>
           </tr>
         </thead>
@@ -124,6 +127,9 @@ function Scoreboard({
                 </td>
                 <td className="py-2 pr-3 text-rose-300">{d?.mistakes.join(', ') || <span className="text-slate-600">–</span>}</td>
                 <td className="py-2 pr-3 text-slate-300">{d?.trades.length || '–'}</td>
+                <td className={`py-2 pr-3 text-right ${dayRR(d) > 0 ? 'text-emerald-400' : dayRR(d) < 0 ? 'text-rose-400' : 'text-slate-500'}`}>
+                  {hasRR(d) ? formatRR(dayRR(d)) : '–'}
+                </td>
                 <td className={`py-2 text-right ${pnl > 0 ? 'text-emerald-400' : pnl < 0 ? 'text-rose-400' : 'text-slate-500'}`}>
                   {d?.trades.length ? formatMoney(pnl) : '–'}
                 </td>

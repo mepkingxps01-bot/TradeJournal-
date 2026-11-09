@@ -62,6 +62,8 @@ export interface Trade {
   result: TradeResult
   /** Free text like "+120" or "-45.5"; parsed with parsePnl for totals. */
   pnl: string
+  /** Free text like "2", "+1.5" or "-1" (risk multiple); parsed with parsePnl. */
+  rr?: string
 }
 
 export type DayBias = '' | 'buy' | 'sell' | 'none'

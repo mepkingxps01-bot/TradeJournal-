@@ -124,7 +124,7 @@ async function editTrades(pair: string, weekStart: string, dow: number, fn: (t: 
 export function addTrade(pair: string, weekStart: string, dow: number) {
   return editTrades(pair, weekStart, dow, (t) => [
     ...t,
-    { id: uid(), reason: '', setup: '', result: '', pnl: '' },
+    { id: uid(), reason: '', setup: '', result: '', pnl: '', rr: '' },
   ])
 }
 
@@ -219,4 +219,14 @@ export function computeStats(days: Day[]): Stats {
 
 export function dayPnl(day?: Day): number {
   return (day?.trades ?? []).reduce((sum, t) => sum + parsePnl(t.pnl), 0)
+}
+
+/** Total RR of a day's trades. */
+export function dayRR(day?: Day): number {
+  return (day?.trades ?? []).reduce((sum, t) => sum + parsePnl(t.rr ?? ''), 0)
+}
+
+/** True when at least one trade of the day has an RR filled in. */
+export function hasRR(day?: Day): boolean {
+  return (day?.trades ?? []).some((t) => (t.rr ?? '').trim() !== '')
 }

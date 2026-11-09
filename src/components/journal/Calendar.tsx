@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../lib/db'
-import { addDaysISO, formatMoney, mondayOf, shortDate, todayISO } from '../../lib/format'
-import { dayPnl } from '../../lib/journal'
+import { addDaysISO, formatMoney, formatRR, mondayOf, shortDate, todayISO } from '../../lib/format'
+import { dayPnl, dayRR, hasRR } from '../../lib/journal'
 import { DAY_NAMES, PAIRS } from '../../lib/template'
 import type { Day } from '../../types'
 import { verdictMark } from './WeekPage'
@@ -73,6 +73,8 @@ export default function Calendar({ pair }: { pair?: string }) {
   const inMonth = (data?.days ?? []).filter((d) => addDaysISO(d.weekStart, d.dow).startsWith(month))
   const monthPnl = inMonth.reduce((s, d) => s + dayPnl(d), 0)
   const monthTrades = inMonth.reduce((s, d) => s + d.trades.length, 0)
+  const monthRR = inMonth.reduce((s, d) => s + dayRR(d), 0)
+  const monthHasRR = inMonth.some((d) => hasRR(d))
 
   const shift = (n: number) => {
     const dt = new Date(y, m - 1 + n, 1)
@@ -106,6 +108,11 @@ export default function Calendar({ pair }: { pair?: string }) {
         {monthTrades > 0 && (
           <span className="ml-auto text-sm text-slate-400">
             รวมเดือนนี้ {monthTrades} ไม้ · <b className={pnlCls(monthPnl)}>{formatMoney(monthPnl)}</b>
+            {monthHasRR && (
+              <>
+                {' '}· <b className={pnlCls(monthRR)}>{formatRR(monthRR)}</b>
+              </>
+            )}
           </span>
         )}
       </div>
@@ -154,6 +161,8 @@ export default function Calendar({ pair }: { pair?: string }) {
             const traded = daysOn(iso).filter((d) => d.trades.length > 0)
             const total = traded.reduce((s, d) => s + dayPnl(d), 0)
             const trades = traded.reduce((s, d) => s + d.trades.length, 0)
+            const rr = traded.reduce((s, d) => s + dayRR(d), 0)
+            const anyRR = traded.some((d) => hasRR(d))
             return (
               <button
                 key={iso}
@@ -164,12 +173,16 @@ export default function Calendar({ pair }: { pair?: string }) {
                 {trades > 0 && (
                   <div className="mt-1 text-[10px] leading-tight sm:text-[11px]">
                     <div className={`font-semibold ${pnlCls(total)}`}>{formatMoney(total)}</div>
+                    {anyRR && <div className={`font-semibold ${pnlCls(rr)}`}>{formatRR(rr)}</div>}
                     <div className="text-slate-500">{trades} ไม้</div>
                     <div className="mt-0.5 hidden space-y-px sm:block">
                       {traded.map((d) => (
                         <div key={d.pair} className="flex justify-between gap-1 text-[10px]">
                           <span className="truncate text-slate-500">{d.pair}</span>
-                          <span className={pnlCls(dayPnl(d))}>{formatMoney(dayPnl(d))}</span>
+                          <span className={pnlCls(dayPnl(d))}>
+                            {formatMoney(dayPnl(d))}
+                            {hasRR(d) && <span className={`ml-1 ${pnlCls(dayRR(d))}`}>{formatRR(dayRR(d))}</span>}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -202,6 +215,7 @@ export default function Calendar({ pair }: { pair?: string }) {
                 <div className="mt-1 text-[10px] leading-tight sm:text-[11px]">
                   <div className="text-slate-400">{trades} ไม้</div>
                   <div className={pnlCls(pnl)}>{formatMoney(pnl)}</div>
+                  {hasRR(d) && <div className={`font-semibold ${pnlCls(dayRR(d))}`}>{formatRR(dayRR(d))}</div>}
                 </div>
               )}
             </button>
@@ -229,6 +243,8 @@ function DayBreakdown({ iso, days }: { iso: string; days: Day[] }) {
   const ws = mondayOf(iso)
   const dow = dowOf(iso)
   const total = days.reduce((s, d) => s + dayPnl(d), 0)
+  const rr = days.reduce((s, d) => s + dayRR(d), 0)
+  const anyRR = days.some((d) => hasRR(d))
   return (
     <div className="mt-3 rounded-lg border border-slate-700 bg-slate-950/60 p-3">
       <div className="mb-2 flex items-center justify-between text-sm">
@@ -237,6 +253,11 @@ function DayBreakdown({ iso, days }: { iso: string; days: Day[] }) {
         </span>
         <span className="text-slate-400">
           รวม <b className={pnlCls(total)}>{formatMoney(total)}</b>
+          {anyRR && (
+            <>
+              {' '}· <b className={pnlCls(rr)}>{formatRR(rr)}</b>
+            </>
+          )}
         </span>
       </div>
       <ul className="divide-y divide-slate-800 text-sm">
@@ -250,6 +271,7 @@ function DayBreakdown({ iso, days }: { iso: string; days: Day[] }) {
                 <span className="w-20 font-semibold text-amber-300">{p}</span>
                 <span className={`w-4 ${v.cls}`}>{v.mark}</span>
                 <span className="flex-1 text-slate-400">{trades ? `${trades} ไม้` : '—'}</span>
+                {hasRR(d) && <span className={pnlCls(dayRR(d))}>{formatRR(dayRR(d))}</span>}
                 <span className={pnlCls(dayPnl(d))}>{trades ? formatMoney(dayPnl(d)) : ''}</span>
                 <span className="text-xs text-sky-400">เปิด →</span>
               </Link>
