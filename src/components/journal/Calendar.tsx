@@ -4,7 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../lib/db'
 import { addDaysISO, formatMoney, formatRR, mondayOf, parsePnl, shortDate, todayISO } from '../../lib/format'
 import { dayCommission, dayPnl, dayRR, hasCommission, hasRR, patchDay, tradesCommission, tradesRR } from '../../lib/journal'
-import { ALL_PAIRS, DAY_NAMES, PAIRS } from '../../lib/template'
+import { DAY_NAMES, PAIRS } from '../../lib/template'
 import type { Day } from '../../types'
 import { verdictMark } from './WeekPage'
 
@@ -37,7 +37,6 @@ function DayInput({
   ws,
   dow,
   day,
-  fallback,
   className = '',
 }: {
   kind: 'rr' | 'comm'
@@ -45,8 +44,6 @@ function DayInput({
   ws: string
   dow: number
   day?: Day
-  /** Value used when the box is empty (defaults to the day's trades). */
-  fallback?: number
   className?: string
 }) {
   const key = kind === 'rr' ? 'rrManual' : 'commManual'
@@ -57,7 +54,7 @@ function DayInput({
     if (v.trim() !== stored.trim()) void patchDay(pair, ws, dow, { [key]: v.trim() })
   }
   const n = v.trim() ? parsePnl(v) : 0
-  const sum = fallback ?? (kind === 'rr' ? tradesRR(day) : tradesCommission(day))
+  const sum = kind === 'rr' ? tradesRR(day) : tradesCommission(day)
   const placeholder = kind === 'rr' ? (sum ? formatRR(sum) : 'RR') : sum ? `คอม ${formatMoney(sum)}` : 'คอม'
   const color = kind === 'comm' ? 'text-amber-200' : n > 0 ? 'text-emerald-300' : n < 0 ? 'text-rose-300' : 'text-slate-200'
   return (
@@ -88,15 +85,7 @@ export default function Calendar({ pair }: { pair?: string }) {
   const [sel, setSel] = useState<string | null>(null)
 
   const data = useLiveQuery(async () => {
-    if (!pair) {
-      const all = await db.pdays.toArray()
-      return {
-        days: all.filter((d) => d.pair !== ALL_PAIRS),
-        totals: all.filter((d) => d.pair === ALL_PAIRS),
-        charts: new Set<string>(),
-        preppedWeeks: new Set<string>(),
-      }
-    }
+    if (!pair) return { days: await db.pdays.toArray(), charts: new Set<string>(), preppedWeeks: new Set<string>() }
     const [days, weeks, owners] = await Promise.all([
       db.pdays.where('pair').equals(pair).toArray(),
       db.pweeks.where('pair').equals(pair).toArray(),
@@ -108,7 +97,7 @@ export default function Calendar({ pair }: { pair?: string }) {
       ...weeks.filter((w) => Object.values(w.fields).some((v) => v.trim())).map((w) => w.weekStart),
       ...weekShots.map((o) => String(o).split(':')[2]),
     ])
-    return { days, totals: [] as Day[], charts, preppedWeeks }
+    return { days, charts, preppedWeeks }
   }, [pair])
 
   const [y, m] = month.split('-').map(Number)
@@ -125,45 +114,13 @@ export default function Calendar({ pair }: { pair?: string }) {
     return (data?.days ?? []).filter((x) => x.weekStart === ws && x.dow === dow)
   }
 
-  /** All-pairs total record for a date (RR / commission typed in this calendar). */
-  const totalOn = (iso: string) => {
-    const ws = mondayOf(iso)
-    const dow = dowOf(iso)
-    return (data?.totals ?? []).find((x) => x.weekStart === ws && x.dow === dow)
-  }
-  /** A date's RR / commission across pairs: the typed total, else the pairs' sum. */
-  const combined = (iso: string) => {
-    const ds = daysOn(iso)
-    const t = totalOn(iso)
-    const rrSum = ds.reduce((s, d) => s + dayRR(d), 0)
-    const commSum = ds.reduce((s, d) => s + dayCommission(d), 0)
-    return {
-      rrSum,
-      commSum,
-      rr: t?.rrManual?.trim() ? dayRR(t) : rrSum,
-      hasRR: !!t?.rrManual?.trim() || ds.some((d) => hasRR(d)),
-      comm: t?.commManual?.trim() ? dayCommission(t) : commSum,
-    }
-  }
-
   // Month totals: days whose date falls in this month.
   const inMonth = (data?.days ?? []).filter((d) => addDaysISO(d.weekStart, d.dow).startsWith(month))
   const monthPnl = inMonth.reduce((s, d) => s + dayPnl(d), 0)
   const monthTrades = inMonth.reduce((s, d) => s + d.trades.length, 0)
-  let monthRR = inMonth.reduce((s, d) => s + dayRR(d), 0)
-  let monthHasRR = inMonth.some((d) => hasRR(d))
-  let monthComm = inMonth.reduce((s, d) => s + dayCommission(d), 0)
-  // Typed all-pairs totals replace that date's pair sums.
-  for (const t of data?.totals ?? []) {
-    const iso = addDaysISO(t.weekStart, t.dow)
-    if (!iso.startsWith(month)) continue
-    const c = combined(iso)
-    if (t.rrManual?.trim()) {
-      monthRR += c.rr - c.rrSum
-      monthHasRR = true
-    }
-    if (t.commManual?.trim()) monthComm += c.comm - c.commSum
-  }
+  const monthRR = inMonth.reduce((s, d) => s + dayRR(d), 0)
+  const monthHasRR = inMonth.some((d) => hasRR(d))
+  const monthComm = inMonth.reduce((s, d) => s + dayCommission(d), 0)
 
   const shift = (n: number) => {
     const dt = new Date(y, m - 1 + n, 1)
@@ -263,23 +220,21 @@ export default function Calendar({ pair }: { pair?: string }) {
             const traded = daysOn(iso).filter((d) => d.trades.length > 0 || hasRR(d) || hasCommission(d))
             const total = traded.reduce((s, d) => s + dayPnl(d), 0)
             const trades = traded.reduce((s, d) => s + d.trades.length, 0)
-            const c = combined(iso)
-            const toggle = () => setSel(iso === sel ? null : iso)
+            const rr = traded.reduce((s, d) => s + dayRR(d), 0)
+            const anyRR = traded.some((d) => hasRR(d))
+            const comm = traded.reduce((s, d) => s + dayCommission(d), 0)
             return (
-              <div
+              <button
                 key={iso}
-                role="button"
-                tabIndex={0}
-                onClick={toggle}
-                onKeyDown={(e) => e.key === 'Enter' && e.target === e.currentTarget && toggle()}
-                className={`${base} flex min-h-14 cursor-pointer flex-col hover:border-slate-500 sm:min-h-16 ${
-                  trades || c.hasRR || c.comm > 0 ? 'bg-slate-800/60' : 'bg-slate-950/30'
-                }`}
+                onClick={() => setSel(iso === sel ? null : iso)}
+                className={`${base} min-h-14 hover:border-slate-500 sm:min-h-16 ${trades ? 'bg-slate-800/60' : 'bg-slate-950/30'}`}
               >
                 <span className={`text-xs ${isToday ? 'font-bold text-sky-300' : 'text-slate-300'}`}>{dateNum}</span>
                 {traded.length > 0 && (
                   <div className="mt-1 text-[10px] leading-tight sm:text-[11px]">
                     {trades > 0 && <div className={`font-semibold ${pnlCls(total)}`}>{formatMoney(total)}</div>}
+                    {anyRR && <div className={`font-semibold ${pnlCls(rr)}`}>{formatRR(rr)}</div>}
+                    {comm > 0 && <div className="text-amber-300/80">คอม {formatMoney(-comm)}</div>}
                     {trades > 0 && <div className="text-slate-500">{trades} ไม้</div>}
                     <div className="mt-0.5 hidden space-y-px sm:block">
                       {traded.map((d) => (
@@ -294,11 +249,7 @@ export default function Calendar({ pair }: { pair?: string }) {
                     </div>
                   </div>
                 )}
-                <div className="mt-auto space-y-0.5 pt-1">
-                  <DayInput kind="rr" pair={ALL_PAIRS} ws={ws} dow={dow} day={totalOn(iso)} fallback={c.rrSum} className="font-semibold" />
-                  <DayInput kind="comm" pair={ALL_PAIRS} ws={ws} dow={dow} day={totalOn(iso)} fallback={c.commSum} />
-                </div>
-              </div>
+              </button>
             )
           }
 
@@ -341,7 +292,7 @@ export default function Calendar({ pair }: { pair?: string }) {
         })}
       </div>
 
-      {!pair && sel && <DayBreakdown iso={sel} days={daysOn(sel)} total={totalOn(sel)} />}
+      {!pair && sel && <DayBreakdown iso={sel} days={daysOn(sel)} />}
 
       <p className="mt-2 text-[11px] text-slate-500">
         {pair ? (
@@ -349,7 +300,7 @@ export default function Calendar({ pair }: { pair?: string }) {
             ✓ ถูก · ~ ถูกแต่ Timing ผิด · ✗ ผิด · <span className="text-sky-400">●</span> มีบันทึก · ช่อง RR / ค่าคอม พิมพ์ได้เลย (เว้นว่าง = รวมจากไม้เทรด) · เสาร์–อาทิตย์ = Weekend Prep สัปดาห์ถัดไป
           </>
         ) : (
-          'P&L รวมทุกคู่ต่อวัน · ช่อง RR / ค่าคอม = รวมทั้งวัน พิมพ์ได้เลย (เว้นว่าง = รวมจากทุกคู่) · กดที่วันเพื่อดูแยกตามคู่'
+          'P&L รวมทุกคู่ต่อวัน · กดที่วันเพื่อดูแยกตามคู่และใส่ RR / ค่าคอม'
         )}
       </p>
     </section>
@@ -357,13 +308,13 @@ export default function Calendar({ pair }: { pair?: string }) {
 }
 
 /** One day across every pair, with links into each pair's day page. */
-function DayBreakdown({ iso, days, total: typed }: { iso: string; days: Day[]; total?: Day }) {
+function DayBreakdown({ iso, days }: { iso: string; days: Day[] }) {
   const ws = mondayOf(iso)
   const dow = dowOf(iso)
   const total = days.reduce((s, d) => s + dayPnl(d), 0)
-  const rr = typed?.rrManual?.trim() ? dayRR(typed) : days.reduce((s, d) => s + dayRR(d), 0)
-  const anyRR = !!typed?.rrManual?.trim() || days.some((d) => hasRR(d))
-  const comm = typed?.commManual?.trim() ? dayCommission(typed) : days.reduce((s, d) => s + dayCommission(d), 0)
+  const rr = days.reduce((s, d) => s + dayRR(d), 0)
+  const anyRR = days.some((d) => hasRR(d))
+  const comm = days.reduce((s, d) => s + dayCommission(d), 0)
   return (
     <div className="mt-3 rounded-lg border border-slate-700 bg-slate-950/60 p-3">
       <div className="mb-2 flex items-center justify-between text-sm">
