@@ -107,6 +107,13 @@ export const DAY_NAMES = [
 /** One journal per pair. The first is where older, pair-less entries went. */
 export const PAIRS = ['XAUUSD', 'NQ', 'EURUSD']
 
+/**
+ * Pseudo-pair holding the RR / commission typed into the all-pairs calendar
+ * (one record per day). Never listed as a pair; when set, its values replace
+ * the sum of the pairs for that day.
+ */
+export const ALL_PAIRS = 'ALL'
+
 /** Early entries saved gold as "XAU". */
 export function normPair(m: string): string {
   return m === 'XAU' ? 'XAUUSD' : m
