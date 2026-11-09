@@ -80,7 +80,7 @@ export async function patchDay(
   pair: string,
   weekStart: string,
   dow: number,
-  patch: Partial<Pick<Day, 'narrative' | 'mistakes' | 'bias' | 'rrManual'>>,
+  patch: Partial<Pick<Day, 'narrative' | 'mistakes' | 'bias' | 'rrManual' | 'commManual'>>,
 ) {
   const id = await ensureDay(pair, weekStart, dow)
   await db.pdays.update(id, { ...patch, updatedAt: Date.now() })
@@ -124,7 +124,7 @@ async function editTrades(pair: string, weekStart: string, dow: number, fn: (t: 
 export function addTrade(pair: string, weekStart: string, dow: number) {
   return editTrades(pair, weekStart, dow, (t) => [
     ...t,
-    { id: uid(), reason: '', setup: '', result: '', pnl: '', rr: '' },
+    { id: uid(), reason: '', setup: '', result: '', pnl: '', rr: '', commission: '' },
   ])
 }
 
@@ -229,6 +229,26 @@ export function tradesRR(day?: Day): number {
 /** The day's RR: the value typed in the calendar if any, else the trades' sum. */
 export function dayRR(day?: Day): number {
   return day?.rrManual?.trim() ? parsePnl(day.rrManual) : tradesRR(day)
+}
+
+/** Sum of the commission typed on the day's trades (always positive). */
+export function tradesCommission(day?: Day): number {
+  return (day?.trades ?? []).reduce((sum, t) => sum + Math.abs(parsePnl(t.commission ?? '')), 0)
+}
+
+/** The day's commission: the calendar value if any, else the trades' sum. */
+export function dayCommission(day?: Day): number {
+  return day?.commManual?.trim() ? Math.abs(parsePnl(day.commManual)) : tradesCommission(day)
+}
+
+/** P&L after commission. */
+export function dayNet(day?: Day): number {
+  return dayPnl(day) - dayCommission(day)
+}
+
+/** True when the day has a commission typed anywhere. */
+export function hasCommission(day?: Day): boolean {
+  return dayCommission(day) > 0
 }
 
 /** True when the day has an RR: typed in the calendar or on any trade. */

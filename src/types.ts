@@ -64,6 +64,8 @@ export interface Trade {
   pnl: string
   /** Free text like "2", "+1.5" or "-1" (risk multiple); parsed with parsePnl. */
   rr?: string
+  /** Commission / fees paid on this trade, e.g. "3.5" (always a cost). */
+  commission?: string
 }
 
 export type DayBias = '' | 'buy' | 'sell' | 'none'
@@ -80,6 +82,8 @@ export interface Day {
   bias?: DayBias
   /** RR typed straight into the calendar; when set it replaces the trades' sum. */
   rrManual?: string
+  /** Commission typed straight into the calendar; replaces the trades' sum. */
+  commManual?: string
   mistakes: string[]
   fields: Record<string, string>
   trades: Trade[]
