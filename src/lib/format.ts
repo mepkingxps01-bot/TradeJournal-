@@ -15,6 +15,12 @@ export function formatMoney(n: number): string {
   })}`
 }
 
+/** Risk multiple, e.g. +2.5R / -1R / 0R. */
+export function formatRR(n: number): string {
+  const r = Math.round(n * 100) / 100
+  return `${r > 0 ? '+' : ''}${r.toLocaleString(undefined, { maximumFractionDigits: 2 })}R`
+}
+
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',

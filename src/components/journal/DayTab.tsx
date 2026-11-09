@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { addDaysISO, formatMoney, parsePnl, shortDate } from '../../lib/format'
+import { addDaysISO, formatMoney, formatRR, parsePnl, shortDate } from '../../lib/format'
 import {
   addShots,
   addTrade,
   dayOwner,
+  dayRR,
+  hasRR,
   deleteTrade,
   patchDay,
   setDayField,
@@ -32,13 +34,22 @@ function TradeCard({ pair, ws, dow, trade, n }: { pair: string; ws: string; dow:
   const [pnl, setPnl] = useState(trade.pnl)
   const pnlTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => setPnl(trade.pnl), [trade.pnl])
+  const [rr, setRr] = useState(trade.rr ?? '')
+  const rrTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => setRr(trade.rr ?? ''), [trade.rr])
   const save = (patch: Partial<Trade>) => updateTrade(pair, ws, dow, trade.id, patch)
   function changePnl(v: string) {
     setPnl(v)
     if (pnlTimer.current) clearTimeout(pnlTimer.current)
     pnlTimer.current = setTimeout(() => save({ pnl: v }), 400)
   }
+  function changeRr(v: string) {
+    setRr(v)
+    if (rrTimer.current) clearTimeout(rrTimer.current)
+    rrTimer.current = setTimeout(() => save({ rr: v }), 400)
+  }
   const value = parsePnl(pnl)
+  const rrValue = parsePnl(rr)
 
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
@@ -64,6 +75,18 @@ function TradeCard({ pair, ws, dow, trade, n }: { pair: string; ws: string; dow:
             value > 0 ? 'text-emerald-300' : value < 0 ? 'text-rose-300' : 'text-slate-200'
           }`}
         />
+        <label className="flex items-center gap-1 text-sm text-slate-400">
+          RR
+          <input
+            value={rr}
+            onChange={(e) => changeRr(e.target.value)}
+            placeholder="เช่น 2 / -1"
+            inputMode="decimal"
+            className={`w-24 rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-sky-500 ${
+              rrValue > 0 ? 'text-emerald-300' : rrValue < 0 ? 'text-rose-300' : 'text-slate-200'
+            }`}
+          />
+        </label>
         <button
           onClick={() => window.confirm(`ลบ Trade #${n} และรูปของไม้นี้?`) && deleteTrade(pair, ws, dow, trade.id)}
           className="ml-auto text-xs text-slate-500 hover:text-red-400"
@@ -157,7 +180,7 @@ export default function DayTab({
         </Card>
       ))}
 
-      <Card title={`Trades${trades.length ? ` · ${trades.length} ไม้ · ${formatMoney(total)}` : ''}`}>
+      <Card title={`Trades${trades.length ? ` · ${trades.length} ไม้ · ${formatMoney(total)}${hasRR(day) ? ` · ${formatRR(dayRR(day))}` : ''}` : ''}`}>
         {trades.map((t, i) => (
           <TradeCard key={t.id} pair={pair} ws={ws} dow={dow} trade={t} n={i + 1} />
         ))}
