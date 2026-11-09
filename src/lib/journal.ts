@@ -80,7 +80,7 @@ export async function patchDay(
   pair: string,
   weekStart: string,
   dow: number,
-  patch: Partial<Pick<Day, 'narrative' | 'mistakes' | 'bias'>>,
+  patch: Partial<Pick<Day, 'narrative' | 'mistakes' | 'bias' | 'rrManual'>>,
 ) {
   const id = await ensureDay(pair, weekStart, dow)
   await db.pdays.update(id, { ...patch, updatedAt: Date.now() })
@@ -221,12 +221,17 @@ export function dayPnl(day?: Day): number {
   return (day?.trades ?? []).reduce((sum, t) => sum + parsePnl(t.pnl), 0)
 }
 
-/** Total RR of a day's trades. */
-export function dayRR(day?: Day): number {
+/** Sum of the RR typed on the day's trades. */
+export function tradesRR(day?: Day): number {
   return (day?.trades ?? []).reduce((sum, t) => sum + parsePnl(t.rr ?? ''), 0)
 }
 
-/** True when at least one trade of the day has an RR filled in. */
+/** The day's RR: the value typed in the calendar if any, else the trades' sum. */
+export function dayRR(day?: Day): number {
+  return day?.rrManual?.trim() ? parsePnl(day.rrManual) : tradesRR(day)
+}
+
+/** True when the day has an RR: typed in the calendar or on any trade. */
 export function hasRR(day?: Day): boolean {
-  return (day?.trades ?? []).some((t) => (t.rr ?? '').trim() !== '')
+  return !!day?.rrManual?.trim() || (day?.trades ?? []).some((t) => (t.rr ?? '').trim() !== '')
 }
